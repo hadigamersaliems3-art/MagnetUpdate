@@ -1,10 +1,11 @@
 -- LocalScript in StarterPlayerScripts
 -- MagnetRed Hub
--- Bewegungsabstand frei einstellbar
+-- Bewegungsabstand frei einstellbar + Tween / Teleport Modi
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local localPlayer = Players.LocalPlayer
 
@@ -23,6 +24,14 @@ local FOLLOW_DISTANCE = 6
 local FOLLOW_SMOOTHNESS = 12
 
 local movementEnabled = true
+
+-- Neue Bewegungsmodi (Exklusiv: "Off", "Tween", "Teleport")
+local tapMovementMode = "Off" 
+local tweenSpeed = 0.2         -- Dauer des Tweens in Sekunden
+local teleportInterval = 0.05  -- Teleport-Intervall in Sekunden (Ticks)
+local lastTeleportTime = 0
+
+local activeTween = nil        -- Aktiver Tween Speicherung
 
 local orbitEnabled = false
 local orbitRadius = 6
@@ -93,8 +102,8 @@ sg.Parent = localPlayer:WaitForChild("PlayerGui")
 
 local hub = Instance.new("Frame")
 hub.Name = "Hub"
-hub.Size = UDim2.new(0, 460, 0, 390)
-hub.Position = UDim2.new(0.5, -230, 0.5, -195)
+hub.Size = UDim2.new(0, 460, 0, 450)
+hub.Position = UDim2.new(0.5, -230, 0.5, -225)
 hub.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 hub.BackgroundTransparency = 0.08
 hub.BorderSizePixel = 0
@@ -137,9 +146,7 @@ local function makeDraggable(frame, dragObject)
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
-		if not dragging then
-			return
-		end
+		if not dragging then return end
 
 		if input.UserInputType ~= Enum.UserInputType.MouseMovement
 			and input.UserInputType ~= Enum.UserInputType.Touch then
@@ -158,7 +165,7 @@ local function makeDraggable(frame, dragObject)
 end
 
 -- =========================================================
--- TITEL
+-- TITEL & BUTTONS
 -- =========================================================
 
 local title = Instance.new("TextLabel")
@@ -170,10 +177,6 @@ title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextScaled = true
 title.Font = Enum.Font.GothamBold
 title.Parent = hub
-
--- =========================================================
--- CLOSE BUTTON
--- =========================================================
 
 local closeButton = Instance.new("TextButton")
 closeButton.Name = "CloseButton"
@@ -190,10 +193,6 @@ closeButton.Parent = hub
 local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 7)
 closeCorner.Parent = closeButton
-
--- =========================================================
--- OPEN BUTTON
--- =========================================================
 
 local openButton = Instance.new("TextButton")
 openButton.Name = "OpenButton"
@@ -220,10 +219,6 @@ openStroke.Parent = openButton
 makeDraggable(hub, title)
 makeDraggable(openButton)
 
--- =========================================================
--- CLOSE / OPEN
--- =========================================================
-
 closeButton.Activated:Connect(function()
 	hub.Visible = false
 	openButton.Visible = true
@@ -238,14 +233,7 @@ end)
 -- TABS
 -- =========================================================
 
-local tabNames = {
-	"Status",
-	"Bewegung",
-	"Orbit",
-	"Ausrichtung",
-	"Info"
-}
-
+local tabNames = {"Status", "Bewegung", "Orbit", "Ausrichtung", "Info"}
 local tabButtons = {}
 
 local tabFrame = Instance.new("Frame")
@@ -319,10 +307,6 @@ local dotCorner = Instance.new("UICorner")
 dotCorner.CornerRadius = UDim.new(1, 0)
 dotCorner.Parent = statusDot
 
--- =========================================================
--- BEWEGUNG ON / OFF
--- =========================================================
-
 local movementToggle = Instance.new("TextButton")
 movementToggle.Size = UDim2.new(0.82, 0, 0, 45)
 movementToggle.Position = UDim2.new(0.09, 0, 0.30, 0)
@@ -348,17 +332,9 @@ end
 
 movementToggle.Activated:Connect(function()
 	movementEnabled = not movementEnabled
-
-	if not movementEnabled then
-		orbitAngle = 0
-	end
-
+	if not movementEnabled then orbitAngle = 0 end
 	updateMovementToggle()
 end)
-
--- =========================================================
--- MODUS SWITCH
--- =========================================================
 
 local modeLabel = Instance.new("TextLabel")
 modeLabel.Size = UDim2.new(1, 0, 0, 25)
@@ -408,43 +384,31 @@ local function updateStatus()
 	local target = getTarget()
 
 	if target then
-		statusLabel.Text =
-			"✅ Ziel: " .. getTargetName() ..
-			" | Beweger: " .. getMoverName()
-
+		statusLabel.Text = "✅ Ziel: " .. getTargetName() .. " | Beweger: " .. getMoverName()
 		statusLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
 		statusDot.BackgroundColor3 = Color3.fromRGB(80, 255, 80)
 	else
-		statusLabel.Text =
-			"❌ Ziel: " .. getTargetName() ..
-			" ist NICHT im Spiel"
-
+		statusLabel.Text = "❌ Ziel: " .. getTargetName() .. " ist NICHT im Spiel"
 		statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
 		statusDot.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
 	end
 
 	if mover ~= localPlayer then
-		modeInfo.Text =
-			"⚠️ " ..
-			getMoverName() ..
-			" ist nicht dein eigener Character.\n" ..
-			"Dieses LocalScript kann nur deinen Character bewegen."
+		modeInfo.Text = "⚠️ " .. getMoverName() .. " ist nicht dein eigener Character.\nDieses LocalScript kann nur deinen Character bewegen."
 	end
 end
 
 modeButton.Activated:Connect(function()
 	redFollowsBlue = not redFollowsBlue
-
 	orbitEnabled = false
 	orbitAngle = 0
 	currentPosition = nil
-
 	updateModeUI()
 	updateStatus()
 end)
 
 -- =========================================================
--- TAB 2: BEWEGUNG
+-- TAB 2: BEWEGUNG & TWEEN/TELEPORT MODI
 -- =========================================================
 
 local moveFrame = Instance.new("Frame")
@@ -453,7 +417,7 @@ moveFrame.BackgroundTransparency = 1
 moveFrame.Parent = content
 
 local moveTitle = Instance.new("TextLabel")
-moveTitle.Size = UDim2.new(1, 0, 0, 28)
+moveTitle.Size = UDim2.new(1, 0, 0, 24)
 moveTitle.BackgroundTransparency = 1
 moveTitle.Text = "Position relativ zum Ziel"
 moveTitle.TextScaled = true
@@ -461,13 +425,10 @@ moveTitle.Font = Enum.Font.GothamBold
 moveTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
 moveTitle.Parent = moveFrame
 
--- =========================================================
 -- FREIER STUDS-WERT
--- =========================================================
-
 local distanceLabel = Instance.new("TextLabel")
-distanceLabel.Size = UDim2.new(0.55, 0, 0, 30)
-distanceLabel.Position = UDim2.new(0, 0, 0, 34)
+distanceLabel.Size = UDim2.new(0.55, 0, 0, 28)
+distanceLabel.Position = UDim2.new(0, 0, 0, 28)
 distanceLabel.BackgroundTransparency = 1
 distanceLabel.Text = "Abstand: 6 Studs"
 distanceLabel.TextScaled = true
@@ -477,8 +438,8 @@ distanceLabel.TextXAlignment = Enum.TextXAlignment.Left
 distanceLabel.Parent = moveFrame
 
 local distanceBox = Instance.new("TextBox")
-distanceBox.Size = UDim2.new(0.32, 0, 0, 34)
-distanceBox.Position = UDim2.new(0.64, 0, 0, 32)
+distanceBox.Size = UDim2.new(0.32, 0, 0, 28)
+distanceBox.Position = UDim2.new(0.64, 0, 0, 28)
 distanceBox.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 distanceBox.Text = "6"
 distanceBox.PlaceholderText = "Studs"
@@ -493,94 +454,43 @@ local distanceCorner = Instance.new("UICorner")
 distanceCorner.CornerRadius = UDim.new(0, 7)
 distanceCorner.Parent = distanceBox
 
-local distanceStroke = Instance.new("UIStroke")
-distanceStroke.Color = Color3.fromRGB(80, 80, 120)
-distanceStroke.Thickness = 1
-distanceStroke.Parent = distanceBox
-
--- Eingabe wird übernommen, sobald das Textfeld verlassen wird
 distanceBox.FocusLost:Connect(function()
 	local value = tonumber(distanceBox.Text)
-
 	if value then
-		-- Mindestwert 0.1 Stud, maximal 10000 Stud
 		FOLLOW_DISTANCE = math.clamp(value, 0.1, 10000)
-
 		distanceBox.Text = tostring(FOLLOW_DISTANCE)
-		distanceLabel.Text =
-			"Abstand: " .. tostring(FOLLOW_DISTANCE) .. " Studs"
+		distanceLabel.Text = "Abstand: " .. tostring(FOLLOW_DISTANCE) .. " Studs"
 	else
-		-- Bei ungültiger Eingabe alten Wert wiederherstellen
 		distanceBox.Text = tostring(FOLLOW_DISTANCE)
-
-		distanceLabel.Text =
-			"Abstand: " .. tostring(FOLLOW_DISTANCE) .. " Studs"
 	end
 end)
 
 local positions = {
-	{
-		name = "Vorne",
-		offset = function()
-			return CFrame.new(0, 0, -FOLLOW_DISTANCE)
-		end
-	},
-
-	{
-		name = "Hinten",
-		offset = function()
-			return CFrame.new(0, 0, FOLLOW_DISTANCE)
-		end
-	},
-
-	{
-		name = "Links",
-		offset = function()
-			return CFrame.new(-FOLLOW_DISTANCE, 0, 0)
-		end
-	},
-
-	{
-		name = "Rechts",
-		offset = function()
-			return CFrame.new(FOLLOW_DISTANCE, 0, 0)
-		end
-	},
-
-	{
-		name = "Oben",
-		offset = function()
-			return CFrame.new(0, FOLLOW_DISTANCE, 0)
-		end
-	},
-
-	{
-		name = "Unten",
-		offset = function()
-			return CFrame.new(0, -FOLLOW_DISTANCE, 0)
-		end
-	}
+	{name = "Vorne", offset = function() return CFrame.new(0, 0, -FOLLOW_DISTANCE) end},
+	{name = "Hinten", offset = function() return CFrame.new(0, 0, FOLLOW_DISTANCE) end},
+	{name = "Links", offset = function() return CFrame.new(-FOLLOW_DISTANCE, 0, 0) end},
+	{name = "Rechts", offset = function() return CFrame.new(FOLLOW_DISTANCE, 0, 0) end},
+	{name = "Oben", offset = function() return CFrame.new(0, FOLLOW_DISTANCE, 0) end},
+	{name = "Unten", offset = function() return CFrame.new(0, -FOLLOW_DISTANCE, 0) end}
 }
 
 local posButtons = {}
 
 local grid = Instance.new("Frame")
-grid.Size = UDim2.new(1, 0, 0, 150)
-grid.Position = UDim2.new(0, 0, 0, 78)
+grid.Size = UDim2.new(1, 0, 0, 110)
+grid.Position = UDim2.new(0, 0, 0, 60)
 grid.BackgroundTransparency = 1
 grid.Parent = moveFrame
 
 local gridLayout = Instance.new("UIGridLayout")
-gridLayout.CellSize = UDim2.new(0.32, -4, 0, 44)
+gridLayout.CellSize = UDim2.new(0.32, -4, 0, 34)
 gridLayout.CellPadding = UDim2.new(0, 5, 0, 6)
 gridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-gridLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 gridLayout.Parent = grid
 
 local function updatePositionButtons()
 	for i, button in ipairs(posButtons) do
 		local pos = positions[i]
-
 		if currentPosition == pos.name then
 			button.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
 			button.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -595,7 +505,6 @@ local function setPosition(name)
 	currentPosition = name
 	orbitEnabled = false
 	orbitAngle = 0
-
 	updatePositionButtons()
 end
 
@@ -614,15 +523,145 @@ for i, pos in ipairs(positions) do
 	c.Parent = btn
 
 	posButtons[i] = btn
-
-	btn.Activated:Connect(function()
-		setPosition(pos.name)
-	end)
+	btn.Activated:Connect(function() setPosition(pos.name) end)
 end
+
+-- =========================================================
+-- NEU: MODI SPEZIELL FÜR TAP BEWEGUNG (TWEEN & TELEPORT)
+-- =========================================================
+
+local modesTitle = Instance.new("TextLabel")
+modesTitle.Size = UDim2.new(1, 0, 0, 22)
+modesTitle.Position = UDim2.new(0, 0, 0, 175)
+modesTitle.BackgroundTransparency = 1
+modesTitle.Text = "Tap-Bewegungsmodi (Nur 1 wählbar)"
+modesTitle.TextScaled = true
+modesTitle.Font = Enum.Font.GothamBold
+modesTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
+modesTitle.Parent = moveFrame
+
+-- Tween Modus Button
+local tweenBtn = Instance.new("TextButton")
+tweenBtn.Size = UDim2.new(0.48, 0, 0, 32)
+tweenBtn.Position = UDim2.new(0, 0, 0, 202)
+tweenBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+tweenBtn.Text = "Modus: Tween [AUS]"
+tweenBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
+tweenBtn.TextScaled = true
+tweenBtn.Font = Enum.Font.GothamBold
+tweenBtn.Parent = moveFrame
+
+local tweenCorner = Instance.new("UICorner")
+tweenCorner.CornerRadius = UDim.new(0, 6)
+tweenCorner.Parent = tweenBtn
+
+-- Teleport Modus Button
+local teleportBtn = Instance.new("TextButton")
+teleportBtn.Size = UDim2.new(0.48, 0, 0, 32)
+teleportBtn.Position = UDim2.new(0.52, 0, 0, 202)
+teleportBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+teleportBtn.Text = "Modus: Teleport [AUS]"
+teleportBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
+teleportBtn.TextScaled = true
+teleportBtn.Font = Enum.Font.GothamBold
+teleportBtn.Parent = moveFrame
+
+local teleportCorner = Instance.new("UICorner")
+teleportCorner.CornerRadius = UDim.new(0, 6)
+teleportCorner.Parent = teleportBtn
+
+-- Tween Speed Field
+local tweenBox = Instance.new("TextBox")
+tweenBox.Size = UDim2.new(0.48, 0, 0, 28)
+tweenBox.Position = UDim2.new(0, 0, 0, 240)
+tweenBox.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+tweenBox.Text = "0.2"
+tweenBox.PlaceholderText = "Tween Speed (Sek)"
+tweenBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+tweenBox.TextScaled = true
+tweenBox.Font = Enum.Font.Gotham
+tweenBox.ClearTextOnFocus = false
+tweenBox.Parent = moveFrame
+
+local tweenBoxCorner = Instance.new("UICorner")
+tweenBoxCorner.CornerRadius = UDim.new(0, 6)
+tweenBoxCorner.Parent = tweenBox
+
+-- Teleport Ticks Field
+local teleportBox = Instance.new("TextBox")
+teleportBox.Size = UDim2.new(0.48, 0, 0, 28)
+teleportBox.Position = UDim2.new(0.52, 0, 0, 240)
+teleportBox.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+teleportBox.Text = "0.05"
+teleportBox.PlaceholderText = "Teleport Ticks (Sek)"
+teleportBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+teleportBox.TextScaled = true
+teleportBox.Font = Enum.Font.Gotham
+teleportBox.ClearTextOnFocus = false
+teleportBox.Parent = moveFrame
+
+local teleportBoxCorner = Instance.new("UICorner")
+teleportBoxCorner.CornerRadius = UDim.new(0, 6)
+teleportBoxCorner.Parent = teleportBox
+
+local function updateTapModeUI()
+	if tapMovementMode == "Tween" then
+		tweenBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+		tweenBtn.Text = "Modus: Tween [AN]"
+		teleportBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+		teleportBtn.Text = "Modus: Teleport [AUS]"
+	elseif tapMovementMode == "Teleport" then
+		teleportBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+		teleportBtn.Text = "Modus: Teleport [AN]"
+		tweenBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+		tweenBtn.Text = "Modus: Tween [AUS]"
+	else
+		tweenBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+		tweenBtn.Text = "Modus: Tween [AUS]"
+		teleportBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+		teleportBtn.Text = "Modus: Teleport [AUS]"
+	end
+end
+
+tweenBtn.Activated:Connect(function()
+	if tapMovementMode == "Tween" then
+		tapMovementMode = "Off"
+	else
+		tapMovementMode = "Tween"
+	end
+	updateTapModeUI()
+end)
+
+teleportBtn.Activated:Connect(function()
+	if tapMovementMode == "Teleport" then
+		tapMovementMode = "Off"
+	else
+		tapMovementMode = "Teleport"
+	end
+	updateTapModeUI()
+end)
+
+tweenBox.FocusLost:Connect(function()
+	local val = tonumber(tweenBox.Text)
+	if val and val > 0 then
+		tweenSpeed = val
+	else
+		tweenBox.Text = tostring(tweenSpeed)
+	end
+end)
+
+teleportBox.FocusLost:Connect(function()
+	local val = tonumber(teleportBox.Text)
+	if val and val >= 0 then
+		teleportInterval = val
+	else
+		teleportBox.Text = tostring(teleportInterval)
+	end
+end)
 
 local followStatus = Instance.new("TextLabel")
 followStatus.Size = UDim2.new(1, 0, 0, 25)
-followStatus.Position = UDim2.new(0, 0, 0, 195)
+followStatus.Position = UDim2.new(0, 0, 0, 275)
 followStatus.BackgroundTransparency = 1
 followStatus.Text = "Position: Keine"
 followStatus.TextScaled = true
@@ -665,7 +704,6 @@ orbitCorner.Parent = orbitToggle
 
 orbitToggle.Activated:Connect(function()
 	orbitEnabled = not orbitEnabled
-
 	if orbitEnabled then
 		currentPosition = nil
 		orbitAngle = 0
@@ -675,7 +713,6 @@ orbitToggle.Activated:Connect(function()
 		orbitToggle.Text = "Orbit: AUS"
 		orbitToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 	end
-
 	updatePositionButtons()
 end)
 
@@ -727,7 +764,6 @@ speedBox.Parent = orbitFrame
 
 radiusBox.FocusLost:Connect(function()
 	local value = tonumber(radiusBox.Text)
-
 	if value and value > 0 then
 		orbitRadius = math.clamp(value, 1, 10000)
 		radiusBox.Text = tostring(orbitRadius)
@@ -739,7 +775,6 @@ end)
 
 speedBox.FocusLost:Connect(function()
 	local value = tonumber(speedBox.Text)
-
 	if value then
 		orbitSpeed = math.clamp(value, 1, 1000)
 		speedBox.Text = tostring(orbitSpeed)
@@ -766,7 +801,6 @@ directionCorner.Parent = directionButton
 
 directionButton.Activated:Connect(function()
 	orbitDirection = orbitDirection * -1
-
 	if orbitDirection == 1 then
 		directionButton.Text = "Drehrichtung: Uhrzeigersinn"
 	else
@@ -774,10 +808,7 @@ directionButton.Activated:Connect(function()
 	end
 end)
 
--- =========================================================
 -- KEYBOARD BINDINGS
--- =========================================================
-
 local keyboardTitle = Instance.new("TextLabel")
 keyboardTitle.Size = UDim2.new(1, 0, 0, 24)
 keyboardTitle.Position = UDim2.new(0, 0, 0, 260)
@@ -802,20 +833,14 @@ keyboardLayout.Parent = keyboardFrame
 local keyButtons = {}
 
 local function keyName(keyCode)
-	if not keyCode then
-		return "Nicht gesetzt"
-	end
-
+	if not keyCode then return "Nicht gesetzt" end
 	return keyCode.Name
 end
 
 local function isKeyAlreadyUsed(keyCode, exceptName)
 	for name, assignedKey in pairs(keybinds) do
-		if name ~= exceptName and assignedKey == keyCode then
-			return true
-		end
+		if name ~= exceptName and assignedKey == keyCode then return true end
 	end
-
 	return false
 end
 
@@ -842,30 +867,18 @@ local function createKeyButton(positionName)
 	end)
 end
 
-for _, position in ipairs({
-	"Vorne",
-	"Hinten",
-	"Links",
-	"Rechts",
-	"Oben",
-	"Unten"
-}) do
+for _, position in ipairs({"Vorne", "Hinten", "Links", "Rechts", "Oben", "Unten"}) do
 	createKeyButton(position)
 end
 
 local function updateKeyButton(name)
 	local button = keyButtons[name]
-
-	if not button then
-		return
-	end
-
+	if not button then return end
 	if keybinds[name] then
 		button.Text = name .. ": [ " .. keyName(keybinds[name]) .. " ]"
 	else
 		button.Text = name .. ": [ Taste ]"
 	end
-
 	button.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 end
 
@@ -887,24 +900,7 @@ cameraTitle.Font = Enum.Font.GothamBold
 cameraTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
 cameraTitle.Parent = cameraFrame
 
-local cameraInfo = Instance.new("TextLabel")
-cameraInfo.Size = UDim2.new(1, 0, 0, 25)
-cameraInfo.Position = UDim2.new(0, 0, 0, 32)
-cameraInfo.BackgroundTransparency = 1
-cameraInfo.Text = "Die Kamera bleibt vollständig frei."
-cameraInfo.TextScaled = true
-cameraInfo.Font = Enum.Font.Gotham
-cameraInfo.TextColor3 = Color3.fromRGB(180, 180, 200)
-cameraInfo.Parent = cameraFrame
-
-local cameraModes = {
-	"Vorne",
-	"Hinten",
-	"Links",
-	"Rechts",
-	"Links vorne",
-	"Rechts vorne"
-}
+local cameraModes = {"Vorne", "Hinten", "Links", "Rechts", "Links vorne", "Rechts vorne"}
 
 local cameraGrid = Instance.new("Frame")
 cameraGrid.Size = UDim2.new(1, 0, 0, 150)
@@ -947,26 +943,11 @@ for _, mode in ipairs(cameraModes) do
 	c.Parent = btn
 
 	cameraButtons[mode] = btn
-
 	btn.Activated:Connect(function()
 		facingMode = mode
 		updateCameraButtons()
 	end)
 end
-
-local cameraNotice = Instance.new("TextLabel")
-cameraNotice.Size = UDim2.new(1, 0, 0, 70)
-cameraNotice.Position = UDim2.new(0, 0, 0, 225)
-cameraNotice.BackgroundTransparency = 1
-cameraNotice.Text =
-	"FOV wird nicht verändert.\n" ..
-	"Die Roblox-Kamera bleibt normal steuerbar.\n" ..
-	"Nur die Blickrichtung des Characters wird geändert."
-
-cameraNotice.TextScaled = true
-cameraNotice.Font = Enum.Font.Gotham
-cameraNotice.TextColor3 = Color3.fromRGB(180, 180, 200)
-cameraNotice.Parent = cameraFrame
 
 -- =========================================================
 -- TAB 5: INFO
@@ -982,17 +963,11 @@ infoLabel.Size = UDim2.new(1, 0, 1, 0)
 infoLabel.BackgroundTransparency = 1
 infoLabel.Text =
 	"MagnetRed Hub\n\n" ..
-	"• Zwei Bewegungsmodi\n" ..
-	"• Bewegung AN / AUS\n" ..
-	"• Frei einstellbarer Stud-Abstand\n" ..
-	"• Red kann Blue folgen\n" ..
-	"• Blue kann Red folgen\n" ..
-	"• 6 relative Positionen\n" ..
+	"• Bewegung & Modi (Tween, Teleport)\n" ..
+	"• Unabhängige Werte für Tween-Speed & Ticks\n" ..
 	"• Orbit mit eigener Geschwindigkeit\n" ..
 	"• Eigene Keyboard-Bindings\n" ..
-	"• Charakter-Ausrichtung unabhängig von der Kamera\n" ..
-	"• FOV bleibt unverändert\n" ..
-	"• Hub minimierbar und draggable\n\n" ..
+	"• Charakter-Ausrichtung frei wählbar\n\n" ..
 	"M = Hub ein/aus"
 
 infoLabel.TextScaled = true
@@ -1007,355 +982,208 @@ infoLabel.Parent = infoFrame
 -- =========================================================
 
 local function getMyRoot()
-	if not movementEnabled then
-		return nil
-	end
-
+	if not movementEnabled then return nil end
 	local mover = getMover()
-
-	if mover ~= localPlayer then
-		return nil
-	end
-
+	if mover ~= localPlayer then return nil end
 	local character = localPlayer.Character
-
-	if not character then
-		return nil
-	end
-
+	if not character then return nil end
 	return character:FindFirstChild("HumanoidRootPart")
 end
 
 local function getTargetRoot()
 	local target = getTarget()
-
-	if not target or not target.Character then
-		return nil
-	end
-
+	if not target or not target.Character then return nil end
 	return target.Character:FindFirstChild("HumanoidRootPart")
 end
 
 local function calculatePosition(targetRoot)
-
 	if orbitEnabled then
-
 		local radians = math.rad(orbitAngle)
-
-		local offset = Vector3.new(
-			math.cos(radians) * orbitRadius,
-			0,
-			math.sin(radians) * orbitRadius
-		)
-
+		local offset = Vector3.new(math.cos(radians) * orbitRadius, 0, math.sin(radians) * orbitRadius)
 		return targetRoot.Position + offset
 	end
 
-	if not currentPosition then
-		return nil
-	end
+	if not currentPosition then return nil end
 
 	for _, position in ipairs(positions) do
-
 		if position.name == currentPosition then
-
-			-- Der Abstand wird JETZT bei jeder Berechnung
-			-- aus dem aktuellen Textfeld-Wert genommen.
 			return (targetRoot.CFrame * position.offset()).Position
-
 		end
-
 	end
-
 	return nil
 end
 
 local function getFacingDirection(targetRoot)
-
 	local forward = targetRoot.CFrame.LookVector
 	local right = targetRoot.CFrame.RightVector
 
-	if facingMode == "Vorne" then
-		return forward
-
-	elseif facingMode == "Hinten" then
-		return -forward
-
-	elseif facingMode == "Links" then
-		return -right
-
-	elseif facingMode == "Rechts" then
-		return right
-
-	elseif facingMode == "Links vorne" then
-		return (forward - right).Unit
-
-	elseif facingMode == "Rechts vorne" then
-		return (forward + right).Unit
-	end
-
+	if facingMode == "Vorne" then return forward
+	elseif facingMode == "Hinten" then return -forward
+	elseif facingMode == "Links" then return -right
+	elseif facingMode == "Rechts" then return right
+	elseif facingMode == "Links vorne" then return (forward - right).Unit
+	elseif facingMode == "Rechts vorne" then return (forward + right).Unit end
 	return forward
 end
 
 local function updateFollow(deltaTime)
-
-	if not movementEnabled then
-		return
-	end
+	if not movementEnabled then return end
 
 	local myRoot = getMyRoot()
 	local targetRoot = getTargetRoot()
 
-	if not myRoot or not targetRoot then
-		return
-	end
+	if not myRoot or not targetRoot then return end
 
 	if orbitEnabled then
-
-		orbitAngle +=
-			orbitSpeed *
-			deltaTime *
-			orbitDirection
-
-		if orbitAngle >= 360 then
-			orbitAngle -= 360
-
-		elseif orbitAngle <= -360 then
-			orbitAngle += 360
-		end
-
+		orbitAngle += orbitSpeed * deltaTime * orbitDirection
+		if orbitAngle >= 360 then orbitAngle -= 360
+		elseif orbitAngle <= -360 then orbitAngle += 360 end
 	end
 
 	local targetPosition = calculatePosition(targetRoot)
+	if not targetPosition then return end
 
-	if not targetPosition then
-		return
-	end
-
-	local currentPositionVector = myRoot.Position
-
-	local newPosition =
-		currentPositionVector:Lerp(
-			targetPosition,
-			math.clamp(
-				FOLLOW_SMOOTHNESS * deltaTime,
-				0,
-				1
-			)
-		)
-
-	local facingDirection =
-		getFacingDirection(targetRoot)
+	local facingDirection = getFacingDirection(targetRoot)
+	local targetCFrame
 
 	if facingDirection.Magnitude > 0.001 then
-
-		local horizontalDirection =
-			Vector3.new(
-				facingDirection.X,
-				0,
-				facingDirection.Z
-			)
-
+		local horizontalDirection = Vector3.new(facingDirection.X, 0, facingDirection.Z)
 		if horizontalDirection.Magnitude > 0.001 then
-
-			horizontalDirection =
-				horizontalDirection.Unit
-
-			myRoot.CFrame =
-				CFrame.lookAt(
-					newPosition,
-					newPosition + horizontalDirection,
-					Vector3.yAxis
-				)
-
+			horizontalDirection = horizontalDirection.Unit
+			targetCFrame = CFrame.lookAt(targetPosition, targetPosition + horizontalDirection, Vector3.yAxis)
 		else
+			targetCFrame = CFrame.new(targetPosition)
+		end
+	else
+		targetCFrame = CFrame.new(targetPosition)
+	end
 
-			myRoot.CFrame =
-				CFrame.new(newPosition)
+	-- MODI UNTERSCHEIDUNG
+	if tapMovementMode == "Tween" then
+		if activeTween then activeTween:Cancel() end
+		local tweenInfo = TweenInfo.new(tweenSpeed, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		activeTween = TweenService:Create(myRoot, tweenInfo, {CFrame = targetCFrame})
+		activeTween:Play()
 
+	elseif tapMovementMode == "Teleport" then
+		local currentTime = tick()
+		if currentTime - lastTeleportTime >= teleportInterval then
+			lastTeleportTime = currentTime
+			myRoot.CFrame = targetCFrame
 		end
 
 	else
+		-- Standard Lerp Bewegung
+		local currentPositionVector = myRoot.Position
+		local newPosition = currentPositionVector:Lerp(targetPosition, math.clamp(FOLLOW_SMOOTHNESS * deltaTime, 0, 1))
 
-		myRoot.CFrame =
-			CFrame.new(newPosition)
-
+		if facingDirection.Magnitude > 0.001 then
+			local horizontalDirection = Vector3.new(facingDirection.X, 0, facingDirection.Z)
+			if horizontalDirection.Magnitude > 0.001 then
+				horizontalDirection = horizontalDirection.Unit
+				myRoot.CFrame = CFrame.lookAt(newPosition, newPosition + horizontalDirection, Vector3.yAxis)
+			else
+				myRoot.CFrame = CFrame.new(newPosition)
+			end
+		else
+			myRoot.CFrame = CFrame.new(newPosition)
+		end
 	end
 
 	if orbitEnabled then
-
-		followStatus.Text =
-			"Orbit aktiv | Radius: " ..
-			tostring(orbitRadius) ..
-			" | Speed: " ..
-			tostring(orbitSpeed) ..
-			"°/s"
-
+		followStatus.Text = "Orbit aktiv | Radius: " .. tostring(orbitRadius) .. " | Speed: " .. tostring(orbitSpeed) .. "°/s"
 	else
-
-		followStatus.Text =
-			"Position: " ..
-			tostring(currentPosition or "Keine") ..
-			" | Abstand: " ..
-			tostring(FOLLOW_DISTANCE) ..
-			" Studs"
-
+		followStatus.Text = "Pos: " .. tostring(currentPosition or "Keine") .. " | Modus: " .. tapMovementMode
 	end
 end
 
-followConnection =
-	RunService.RenderStepped:Connect(function(deltaTime)
-		updateFollow(deltaTime)
-	end)
+followConnection = RunService.RenderStepped:Connect(function(deltaTime)
+	updateFollow(deltaTime)
+end)
 
 -- =========================================================
 -- KEYBOARD INPUT
 -- =========================================================
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-
-	if gameProcessed then
-		return
-	end
-
-	if input.UserInputType ~= Enum.UserInputType.Keyboard then
-		return
-	end
+	if gameProcessed then return end
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
 
 	local keyCode = input.KeyCode
 
-	-- Keybind einstellen
 	if waitingForKey then
-
 		if keyCode == Enum.KeyCode.Escape then
-
 			local oldName = waitingForKey
-
 			waitingForKey = nil
-
 			updateKeyButton(oldName)
-
 			return
 		end
 
 		local positionName = waitingForKey
-
 		if isKeyAlreadyUsed(keyCode, positionName) then
-
-			keyButtons[positionName].Text =
-				positionName .. ": bereits benutzt"
-
+			keyButtons[positionName].Text = positionName .. ": bereits benutzt"
 			task.delay(1, function()
-
 				if waitingForKey == positionName then
-
-					keyButtons[positionName].Text =
-						positionName ..
-						": [ Taste drücken ]"
-
+					keyButtons[positionName].Text = positionName .. ": [ Taste drücken ]"
 				end
-
 			end)
-
 			return
 		end
 
 		keybinds[positionName] = keyCode
-
 		waitingForKey = nil
-
 		updateKeyButton(positionName)
-
 		return
 	end
 
-	-- Position-Keybinds
 	for positionName, assignedKey in pairs(keybinds) do
-
 		if assignedKey == keyCode then
-
 			setPosition(positionName)
-
 			return
 		end
-
 	end
 
-	-- M = Hub ein/aus
 	if keyCode == Enum.KeyCode.M then
-
 		if hub.Visible then
-
 			hub.Visible = false
 			openButton.Visible = true
-
 		else
-
 			hub.Visible = true
 			openButton.Visible = false
-
 		end
-
 	end
-
 end)
 
 -- =========================================================
 -- TAB SWITCH
 -- =========================================================
 
-local allFrames = {
-	statusFrame,
-	moveFrame,
-	orbitFrame,
-	cameraFrame,
-	infoFrame
-}
+local allFrames = {statusFrame, moveFrame, orbitFrame, cameraFrame, infoFrame}
 
 local function switchTab(index)
-
 	for i, frame in ipairs(allFrames) do
 		frame.Visible = (i == index)
 	end
 
 	for i, button in ipairs(tabButtons) do
-
 		if i == index then
-
-			button.BackgroundColor3 =
-				Color3.fromRGB(60, 120, 255)
-
-			button.TextColor3 =
-				Color3.fromRGB(255, 255, 255)
-
+			button.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+			button.TextColor3 = Color3.fromRGB(255, 255, 255)
 		else
-
-			button.BackgroundColor3 =
-				Color3.fromRGB(40, 40, 55)
-
-			button.TextColor3 =
-				Color3.fromRGB(200, 200, 220)
-
+			button.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+			button.TextColor3 = Color3.fromRGB(200, 200, 220)
 		end
-
 	end
 
 	if index == 1 then
-
 		updateStatus()
 		updateModeUI()
 		updateMovementToggle()
-
 	end
-
 end
 
 for i, button in ipairs(tabButtons) do
-
-	button.Activated:Connect(function()
-		switchTab(i)
-	end)
-
+	button.Activated:Connect(function() switchTab(i) end)
 end
 
 -- =========================================================
@@ -1363,16 +1191,11 @@ end
 -- =========================================================
 
 switchTab(1)
-
 updateCameraButtons()
 updatePositionButtons()
+updateTapModeUI()
 updateModeUI()
 updateMovementToggle()
 updateStatus()
 
 print("✅ MagnetRed Hub geladen")
-print("📏 Stud-Abstand frei einstellbar")
-print("🟢 Bewegung AN/AUS")
-print("✕ Close / OPEN")
-print("🖐 Hub draggable")
-print("M = Hub ein/aus")
