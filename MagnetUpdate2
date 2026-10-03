@@ -1,0 +1,1079 @@
+-- LocalScript in StarterPlayerScripts
+-- MagnetRed67 Hub
+-- MagnetRed67 folgt MagnetBlue67
+-- Unterstützt jetzt beide Bewegungsrichtungen
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local localPlayer = Players.LocalPlayer
+
+local RED_NAME = "MagnetRed67"
+local BLUE_NAME = "MagnetBlue67"
+
+-- true  = MagnetRed67 bewegt sich -> MagnetBlue67 ist Ziel
+-- false = MagnetBlue67 bewegt sich -> MagnetRed67 ist Ziel
+local redFollowsBlue = true
+
+-- =========================================================
+-- EINSTELLUNGEN
+-- =========================================================
+
+local FOLLOW_DISTANCE = 6
+local FOLLOW_SMOOTHNESS = 12
+
+local orbitEnabled = false
+local orbitRadius = 6
+local orbitSpeed = 45 -- Grad pro Sekunde
+local orbitAngle = 0
+local orbitDirection = 1
+
+local currentPosition = nil
+local followConnection = nil
+
+-- Charakter-Blickrichtung
+local facingMode = "Vorne"
+
+-- =========================================================
+-- FUNKTIONEN FÜR RED / BLUE MODUS
+-- =========================================================
+
+local function getMoverName()
+	if redFollowsBlue then
+		return RED_NAME
+	else
+		return BLUE_NAME
+	end
+end
+
+local function getTargetName()
+	if redFollowsBlue then
+		return BLUE_NAME
+	else
+		return RED_NAME
+	end
+end
+
+local function getMover()
+	return Players:FindFirstChild(getMoverName())
+end
+
+local function getTarget()
+	return Players:FindFirstChild(getTargetName())
+end
+
+-- =========================================================
+-- KEYBINDS
+-- =========================================================
+
+local keybinds = {
+	Vorne = nil,
+	Hinten = nil,
+	Links = nil,
+	Rechts = nil,
+	Oben = nil,
+	Unten = nil
+}
+
+local waitingForKey = nil
+
+-- =========================================================
+-- GUI
+-- =========================================================
+
+local sg = Instance.new("ScreenGui")
+sg.Name = "MagnetHub"
+sg.ResetOnSpawn = false
+sg.Parent = localPlayer:WaitForChild("PlayerGui")
+
+local hub = Instance.new("Frame")
+hub.Name = "Hub"
+hub.Size = UDim2.new(0, 460, 0, 390)
+hub.Position = UDim2.new(0.5, -230, 0.5, -195)
+hub.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+hub.BackgroundTransparency = 0.08
+hub.BorderSizePixel = 0
+hub.Parent = sg
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = hub
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(80, 80, 120)
+stroke.Thickness = 2
+stroke.Parent = hub
+
+-- =========================================================
+-- TITEL
+-- =========================================================
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 32)
+title.Position = UDim2.new(0, 10, 0, 2)
+title.BackgroundTransparency = 1
+title.Text = "⚙️ MagnetRed Hub"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.Parent = hub
+
+-- =========================================================
+-- TABS
+-- =========================================================
+
+local tabNames = {
+	"Status",
+	"Bewegung",
+	"Orbit",
+	"Ausrichtung",
+	"Info"
+}
+
+local tabButtons = {}
+
+local tabFrame = Instance.new("Frame")
+tabFrame.Size = UDim2.new(1, -10, 0, 34)
+tabFrame.Position = UDim2.new(0, 5, 0, 36)
+tabFrame.BackgroundTransparency = 1
+tabFrame.Parent = hub
+
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+tabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+tabLayout.Padding = UDim.new(0, 4)
+tabLayout.Parent = tabFrame
+
+for i, name in ipairs(tabNames) do
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.19, -4, 1, 0)
+	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	btn.Text = name
+	btn.TextColor3 = Color3.fromRGB(200, 200, 220)
+	btn.TextScaled = true
+	btn.Font = Enum.Font.Gotham
+	btn.BorderSizePixel = 0
+	btn.Parent = tabFrame
+
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 6)
+	c.Parent = btn
+
+	tabButtons[i] = btn
+end
+
+-- =========================================================
+-- CONTENT
+-- =========================================================
+
+local content = Instance.new("Frame")
+content.Name = "Content"
+content.Size = UDim2.new(1, -20, 1, -80)
+content.Position = UDim2.new(0, 10, 0, 75)
+content.BackgroundTransparency = 1
+content.Parent = hub
+
+-- =========================================================
+-- TAB 1: STATUS
+-- =========================================================
+
+local statusFrame = Instance.new("Frame")
+statusFrame.Size = UDim2.new(1, 0, 1, 0)
+statusFrame.BackgroundTransparency = 1
+statusFrame.Parent = content
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, 0, 0, 50)
+statusLabel.Position = UDim2.new(0, 0, 0.04, 0)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "MagnetBlue67: ?"
+statusLabel.TextScaled = true
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+statusLabel.Parent = statusFrame
+
+local statusDot = Instance.new("Frame")
+statusDot.Size = UDim2.new(0, 30, 0, 30)
+statusDot.Position = UDim2.new(0.5, -15, 0.31, 0)
+statusDot.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+statusDot.Parent = statusFrame
+
+local dotCorner = Instance.new("UICorner")
+dotCorner.CornerRadius = UDim.new(1, 0)
+dotCorner.Parent = statusDot
+
+-- =========================================================
+-- MODUS-SWITCH
+-- =========================================================
+
+local modeLabel = Instance.new("TextLabel")
+modeLabel.Size = UDim2.new(1, 0, 0, 25)
+modeLabel.Position = UDim2.new(0, 0, 0.48, 0)
+modeLabel.BackgroundTransparency = 1
+modeLabel.Text = "Bewegungsmodus"
+modeLabel.TextScaled = true
+modeLabel.Font = Enum.Font.GothamBold
+modeLabel.TextColor3 = Color3.fromRGB(220, 220, 235)
+modeLabel.Parent = statusFrame
+
+local modeButton = Instance.new("TextButton")
+modeButton.Size = UDim2.new(0.82, 0, 0, 42)
+modeButton.Position = UDim2.new(0.09, 0, 0.59, 0)
+modeButton.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+modeButton.TextScaled = true
+modeButton.Font = Enum.Font.GothamBold
+modeButton.BorderSizePixel = 0
+modeButton.Parent = statusFrame
+
+local modeCorner = Instance.new("UICorner")
+modeCorner.CornerRadius = UDim.new(0, 8)
+modeCorner.Parent = modeButton
+
+local modeInfo = Instance.new("TextLabel")
+modeInfo.Size = UDim2.new(1, 0, 0, 40)
+modeInfo.Position = UDim2.new(0, 0, 0.77, 0)
+modeInfo.BackgroundTransparency = 1
+modeInfo.TextScaled = true
+modeInfo.Font = Enum.Font.Gotham
+modeInfo.TextColor3 = Color3.fromRGB(180, 180, 200)
+modeInfo.Parent = statusFrame
+
+local function updateModeUI()
+	if redFollowsBlue then
+		modeButton.Text = "🔴 Red bewegt sich → 🔵 Blue"
+		modeInfo.Text = "MagnetRed67 wird relativ zu MagnetBlue67 bewegt."
+	else
+		modeButton.Text = "🔵 Blue bewegt sich → 🔴 Red"
+		modeInfo.Text = "MagnetBlue67 wird relativ zu MagnetRed67 bewegt."
+	end
+end
+
+local function updateStatus()
+	local mover = getMover()
+	local target = getTarget()
+
+	if target then
+		statusLabel.Text =
+			"✅ Ziel: " .. getTargetName() .. " | Beweger: " .. getMoverName()
+
+		statusLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
+		statusDot.BackgroundColor3 = Color3.fromRGB(80, 255, 80)
+	else
+		statusLabel.Text =
+			"❌ Ziel: " .. getTargetName() .. " ist NICHT im Spiel"
+
+		statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+		statusDot.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+	end
+
+	if mover ~= localPlayer then
+		modeInfo.Text =
+			"⚠️ " ..
+			getMoverName() ..
+			" ist nicht dein eigener Character.\n" ..
+			"Dieses LocalScript kann nur deinen eigenen Character bewegen."
+	end
+end
+
+modeButton.Activated:Connect(function()
+	redFollowsBlue = not redFollowsBlue
+
+	orbitEnabled = false
+	orbitAngle = 0
+	currentPosition = nil
+
+	updateModeUI()
+	updateStatus()
+end)
+
+-- =========================================================
+-- TAB 2: BEWEGUNG
+-- =========================================================
+
+local moveFrame = Instance.new("Frame")
+moveFrame.Size = UDim2.new(1, 0, 1, 0)
+moveFrame.BackgroundTransparency = 1
+moveFrame.Parent = content
+
+local moveTitle = Instance.new("TextLabel")
+moveTitle.Size = UDim2.new(1, 0, 0, 28)
+moveTitle.BackgroundTransparency = 1
+moveTitle.Text = "Position relativ zum Ziel – 6 Studs"
+moveTitle.TextScaled = true
+moveTitle.Font = Enum.Font.GothamBold
+moveTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
+moveTitle.Parent = moveFrame
+
+local positions = {
+	{
+		name = "Vorne",
+		offset = CFrame.new(0, 0, -FOLLOW_DISTANCE)
+	},
+
+	{
+		name = "Hinten",
+		offset = CFrame.new(0, 0, FOLLOW_DISTANCE)
+	},
+
+	{
+		name = "Links",
+		offset = CFrame.new(-FOLLOW_DISTANCE, 0, 0)
+	},
+
+	{
+		name = "Rechts",
+		offset = CFrame.new(FOLLOW_DISTANCE, 0, 0)
+	},
+
+	{
+		name = "Oben",
+		offset = CFrame.new(0, FOLLOW_DISTANCE, 0)
+	},
+
+	{
+		name = "Unten",
+		offset = CFrame.new(0, -FOLLOW_DISTANCE, 0)
+	}
+}
+
+local posButtons = {}
+
+local grid = Instance.new("Frame")
+grid.Size = UDim2.new(1, 0, 0, 150)
+grid.Position = UDim2.new(0, 0, 0, 38)
+grid.BackgroundTransparency = 1
+grid.Parent = moveFrame
+
+local gridLayout = Instance.new("UIGridLayout")
+gridLayout.CellSize = UDim2.new(0.32, -4, 0, 44)
+gridLayout.CellPadding = UDim2.new(0, 5, 0, 6)
+gridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+gridLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+gridLayout.Parent = grid
+
+local function updatePositionButtons()
+	for i, button in ipairs(posButtons) do
+		local pos = positions[i]
+
+		if currentPosition == pos.name then
+			button.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+			button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			button.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+			button.TextColor3 = Color3.fromRGB(200, 200, 220)
+		end
+	end
+end
+
+local function setPosition(name)
+	currentPosition = name
+	orbitEnabled = false
+	orbitAngle = 0
+
+	updatePositionButtons()
+end
+
+for i, pos in ipairs(positions) do
+	local btn = Instance.new("TextButton")
+	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	btn.Text = pos.name
+	btn.TextColor3 = Color3.fromRGB(200, 200, 220)
+	btn.TextScaled = true
+	btn.Font = Enum.Font.Gotham
+	btn.BorderSizePixel = 0
+	btn.Parent = grid
+
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 8)
+	c.Parent = btn
+
+	posButtons[i] = btn
+
+	btn.Activated:Connect(function()
+		setPosition(pos.name)
+	end)
+end
+
+local followStatus = Instance.new("TextLabel")
+followStatus.Size = UDim2.new(1, 0, 0, 25)
+followStatus.Position = UDim2.new(0, 0, 0, 195)
+followStatus.BackgroundTransparency = 1
+followStatus.Text = "Position: Keine"
+followStatus.TextScaled = true
+followStatus.Font = Enum.Font.Gotham
+followStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
+followStatus.Parent = moveFrame
+
+-- =========================================================
+-- TAB 3: ORBIT + KEYBOARD
+-- =========================================================
+
+local orbitFrame = Instance.new("Frame")
+orbitFrame.Size = UDim2.new(1, 0, 1, 0)
+orbitFrame.BackgroundTransparency = 1
+orbitFrame.Parent = content
+
+local orbitTitle = Instance.new("TextLabel")
+orbitTitle.Size = UDim2.new(1, 0, 0, 26)
+orbitTitle.BackgroundTransparency = 1
+orbitTitle.Text = "Orbit & Keyboard"
+orbitTitle.TextScaled = true
+orbitTitle.Font = Enum.Font.GothamBold
+orbitTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
+orbitTitle.Parent = orbitFrame
+
+local orbitToggle = Instance.new("TextButton")
+orbitToggle.Size = UDim2.new(0.45, 0, 0, 40)
+orbitToggle.Position = UDim2.new(0.275, 0, 0, 35)
+orbitToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+orbitToggle.Text = "Orbit: AUS"
+orbitToggle.TextColor3 = Color3.fromRGB(200, 200, 220)
+orbitToggle.TextScaled = true
+orbitToggle.Font = Enum.Font.GothamBold
+orbitToggle.BorderSizePixel = 0
+orbitToggle.Parent = orbitFrame
+
+local orbitCorner = Instance.new("UICorner")
+orbitCorner.CornerRadius = UDim.new(0, 8)
+orbitCorner.Parent = orbitToggle
+
+orbitToggle.Activated:Connect(function()
+	orbitEnabled = not orbitEnabled
+
+	if orbitEnabled then
+		currentPosition = nil
+		orbitAngle = 0
+		orbitToggle.Text = "Orbit: AN"
+		orbitToggle.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+	else
+		orbitToggle.Text = "Orbit: AUS"
+		orbitToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	end
+
+	updatePositionButtons()
+end)
+
+local radiusLabel = Instance.new("TextLabel")
+radiusLabel.Size = UDim2.new(1, 0, 0, 25)
+radiusLabel.Position = UDim2.new(0, 0, 0, 85)
+radiusLabel.BackgroundTransparency = 1
+radiusLabel.Text = "Orbit-Radius: 6 Studs"
+radiusLabel.TextScaled = true
+radiusLabel.Font = Enum.Font.Gotham
+radiusLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
+radiusLabel.Parent = orbitFrame
+
+local radiusBox = Instance.new("TextBox")
+radiusBox.Size = UDim2.new(0.4, 0, 0, 32)
+radiusBox.Position = UDim2.new(0.3, 0, 0, 112)
+radiusBox.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+radiusBox.Text = "6"
+radiusBox.PlaceholderText = "Radius"
+radiusBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+radiusBox.TextScaled = true
+radiusBox.Font = Enum.Font.Gotham
+radiusBox.ClearTextOnFocus = false
+radiusBox.Parent = orbitFrame
+
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(1, 0, 0, 25)
+speedLabel.Position = UDim2.new(0, 0, 0, 152)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Text = "Orbit-Geschwindigkeit: 45°/s"
+speedLabel.TextScaled = true
+speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
+speedLabel.Parent = orbitFrame
+
+local speedBox = Instance.new("TextBox")
+speedBox.Size = UDim2.new(0.4, 0, 0, 32)
+speedBox.Position = UDim2.new(0.3, 0, 0, 179)
+speedBox.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+speedBox.Text = "45"
+speedBox.PlaceholderText = "Grad/Sekunde"
+speedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+speedBox.TextScaled = true
+speedBox.Font = Enum.Font.Gotham
+speedBox.ClearTextOnFocus = false
+speedBox.Parent = orbitFrame
+
+radiusBox.FocusLost:Connect(function()
+	local value = tonumber(radiusBox.Text)
+
+	if value and value > 0 then
+		orbitRadius = math.clamp(value, 1, 100)
+		radiusBox.Text = tostring(orbitRadius)
+		radiusLabel.Text = "Orbit-Radius: " .. orbitRadius .. " Studs"
+	end
+end)
+
+speedBox.FocusLost:Connect(function()
+	local value = tonumber(speedBox.Text)
+
+	if value then
+		orbitSpeed = math.clamp(value, 1, 1000)
+		speedBox.Text = tostring(orbitSpeed)
+		speedLabel.Text = "Orbit-Geschwindigkeit: " .. orbitSpeed .. "°/s"
+	end
+end)
+
+local directionButton = Instance.new("TextButton")
+directionButton.Size = UDim2.new(0.55, 0, 0, 34)
+directionButton.Position = UDim2.new(0.225, 0, 0, 220)
+directionButton.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+directionButton.Text = "Drehrichtung: Uhrzeigersinn"
+directionButton.TextColor3 = Color3.fromRGB(220, 220, 230)
+directionButton.TextScaled = true
+directionButton.Font = Enum.Font.Gotham
+directionButton.BorderSizePixel = 0
+directionButton.Parent = orbitFrame
+
+local directionCorner = Instance.new("UICorner")
+directionCorner.CornerRadius = UDim.new(0, 8)
+directionCorner.Parent = directionButton
+
+directionButton.Activated:Connect(function()
+	orbitDirection = orbitDirection * -1
+
+	if orbitDirection == 1 then
+		directionButton.Text = "Drehrichtung: Uhrzeigersinn"
+	else
+		directionButton.Text = "Drehrichtung: Gegenuhrzeigersinn"
+	end
+end)
+
+-- =========================================================
+-- KEYBOARD-BINDINGS
+-- =========================================================
+
+local keyboardTitle = Instance.new("TextLabel")
+keyboardTitle.Size = UDim2.new(1, 0, 0, 24)
+keyboardTitle.Position = UDim2.new(0, 0, 0, 260)
+keyboardTitle.BackgroundTransparency = 1
+keyboardTitle.Text = "Eigene Keyboard-Tasten"
+keyboardTitle.TextScaled = true
+keyboardTitle.Font = Enum.Font.GothamBold
+keyboardTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
+keyboardTitle.Parent = orbitFrame
+
+local keyboardFrame = Instance.new("Frame")
+keyboardFrame.Size = UDim2.new(1, 0, 0, 105)
+keyboardFrame.Position = UDim2.new(0, 0, 0, 285)
+keyboardFrame.BackgroundTransparency = 1
+keyboardFrame.Parent = orbitFrame
+
+local keyboardLayout = Instance.new("UIGridLayout")
+keyboardLayout.CellSize = UDim2.new(0.32, -4, 0, 32)
+keyboardLayout.CellPadding = UDim2.new(0, 5, 0, 4)
+keyboardLayout.Parent = keyboardFrame
+
+local keyButtons = {}
+
+local function keyName(keyCode)
+	if not keyCode then
+		return "Nicht gesetzt"
+	end
+
+	return keyCode.Name
+end
+
+local function isKeyAlreadyUsed(keyCode, exceptName)
+	for name, assignedKey in pairs(keybinds) do
+		if name ~= exceptName and assignedKey == keyCode then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function createKeyButton(positionName)
+	local btn = Instance.new("TextButton")
+	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	btn.Text = positionName .. ": [ Taste ]"
+	btn.TextColor3 = Color3.fromRGB(200, 200, 220)
+	btn.TextScaled = true
+	btn.Font = Enum.Font.Gotham
+	btn.BorderSizePixel = 0
+	btn.Parent = keyboardFrame
+
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 6)
+	c.Parent = btn
+
+	keyButtons[positionName] = btn
+
+	btn.Activated:Connect(function()
+		waitingForKey = positionName
+		btn.Text = positionName .. ": [ Taste drücken ]"
+		btn.BackgroundColor3 = Color3.fromRGB(180, 130, 40)
+	end)
+end
+
+for _, position in ipairs({
+	"Vorne",
+	"Hinten",
+	"Links",
+	"Rechts",
+	"Oben",
+	"Unten"
+}) do
+	createKeyButton(position)
+end
+
+local function updateKeyButton(name)
+	local button = keyButtons[name]
+
+	if not button then
+		return
+	end
+
+	if keybinds[name] then
+		button.Text = name .. ": [ " .. keyName(keybinds[name]) .. " ]"
+	else
+		button.Text = name .. ": [ Taste ]"
+	end
+
+	button.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+end
+
+-- =========================================================
+-- TAB 4: AUSRICHTUNG
+-- =========================================================
+
+local cameraFrame = Instance.new("Frame")
+cameraFrame.Size = UDim2.new(1, 0, 1, 0)
+cameraFrame.BackgroundTransparency = 1
+cameraFrame.Parent = content
+
+local cameraTitle = Instance.new("TextLabel")
+cameraTitle.Size = UDim2.new(1, 0, 0, 28)
+cameraTitle.BackgroundTransparency = 1
+cameraTitle.Text = "Charakter-Ausrichtung"
+cameraTitle.TextScaled = true
+cameraTitle.Font = Enum.Font.GothamBold
+cameraTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
+cameraTitle.Parent = cameraFrame
+
+local cameraInfo = Instance.new("TextLabel")
+cameraInfo.Size = UDim2.new(1, 0, 0, 25)
+cameraInfo.Position = UDim2.new(0, 0, 0, 32)
+cameraInfo.BackgroundTransparency = 1
+cameraInfo.Text = "Die Kamera bleibt vollständig frei."
+cameraInfo.TextScaled = true
+cameraInfo.Font = Enum.Font.Gotham
+cameraInfo.TextColor3 = Color3.fromRGB(180, 180, 200)
+cameraInfo.Parent = cameraFrame
+
+local cameraModes = {
+	"Vorne",
+	"Hinten",
+	"Links",
+	"Rechts",
+	"Links vorne",
+	"Rechts vorne"
+}
+
+local cameraGrid = Instance.new("Frame")
+cameraGrid.Size = UDim2.new(1, 0, 0, 150)
+cameraGrid.Position = UDim2.new(0, 0, 0, 65)
+cameraGrid.BackgroundTransparency = 1
+cameraGrid.Parent = cameraFrame
+
+local cameraLayout = Instance.new("UIGridLayout")
+cameraLayout.CellSize = UDim2.new(0.32, -4, 0, 40)
+cameraLayout.CellPadding = UDim2.new(0, 5, 0, 6)
+cameraLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+cameraLayout.Parent = cameraGrid
+
+local cameraButtons = {}
+
+local function updateCameraButtons()
+	for name, button in pairs(cameraButtons) do
+		if name == facingMode then
+			button.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+			button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			button.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+			button.TextColor3 = Color3.fromRGB(200, 200, 220)
+		end
+	end
+end
+
+for _, mode in ipairs(cameraModes) do
+	local btn = Instance.new("TextButton")
+	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	btn.Text = mode
+	btn.TextColor3 = Color3.fromRGB(200, 200, 220)
+	btn.TextScaled = true
+	btn.Font = Enum.Font.Gotham
+	btn.BorderSizePixel = 0
+	btn.Parent = cameraGrid
+
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 8)
+	c.Parent = btn
+
+	cameraButtons[mode] = btn
+
+	btn.Activated:Connect(function()
+		facingMode = mode
+		updateCameraButtons()
+	end)
+end
+
+local cameraNotice = Instance.new("TextLabel")
+cameraNotice.Size = UDim2.new(1, 0, 0, 70)
+cameraNotice.Position = UDim2.new(0, 0, 0, 225)
+cameraNotice.BackgroundTransparency = 1
+cameraNotice.Text =
+	"FOV wird nicht verändert.\n" ..
+	"Die Roblox-Kamera bleibt normal steuerbar.\n" ..
+	"Nur die Blickrichtung des bewegten Characters wird geändert."
+
+cameraNotice.TextScaled = true
+cameraNotice.Font = Enum.Font.Gotham
+cameraNotice.TextColor3 = Color3.fromRGB(180, 180, 200)
+cameraNotice.Parent = cameraFrame
+
+-- =========================================================
+-- TAB 5: INFO
+-- =========================================================
+
+local infoFrame = Instance.new("Frame")
+infoFrame.Size = UDim2.new(1, 0, 1, 0)
+infoFrame.BackgroundTransparency = 1
+infoFrame.Parent = content
+
+local infoLabel = Instance.new("TextLabel")
+infoLabel.Size = UDim2.new(1, 0, 1, 0)
+infoLabel.BackgroundTransparency = 1
+infoLabel.Text =
+	"MagnetRed Hub\n\n" ..
+	"• Zwei Bewegungsmodi\n" ..
+	"• Red kann Blue folgen\n" ..
+	"• Blue kann Red folgen\n" ..
+	"• Standard-Abstand: 6 Studs\n" ..
+	"• 6 relative Positionen\n" ..
+	"• Orbit mit eigener Geschwindigkeit\n" ..
+	"• Eigene Keyboard-Bindings\n" ..
+	"• Charakter-Ausrichtung unabhängig von der Kamera\n" ..
+	"• FOV bleibt unverändert\n\n" ..
+	"M = Hub ein/aus"
+
+infoLabel.TextScaled = true
+infoLabel.Font = Enum.Font.Gotham
+infoLabel.TextColor3 = Color3.fromRGB(200, 200, 220)
+infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+infoLabel.TextYAlignment = Enum.TextYAlignment.Top
+infoLabel.Parent = infoFrame
+
+-- =========================================================
+-- FOLLOW SYSTEM
+-- =========================================================
+
+local function getMyRoot()
+	-- Ein LocalScript kann zuverlässig nur den eigenen
+	-- Character kontinuierlich per CFrame bewegen.
+
+	local mover = getMover()
+
+	if mover ~= localPlayer then
+		return nil
+	end
+
+	local character = localPlayer.Character
+
+	if not character then
+		return nil
+	end
+
+	return character:FindFirstChild("HumanoidRootPart")
+end
+
+local function getTargetRoot()
+	local target = getTarget()
+
+	if not target or not target.Character then
+		return nil
+	end
+
+	return target.Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function calculatePosition(targetRoot)
+	if orbitEnabled then
+		local radians = math.rad(orbitAngle)
+
+		local offset = Vector3.new(
+			math.cos(radians) * orbitRadius,
+			0,
+			math.sin(radians) * orbitRadius
+		)
+
+		return targetRoot.Position + offset
+	end
+
+	if not currentPosition then
+		return nil
+	end
+
+	for _, position in ipairs(positions) do
+		if position.name == currentPosition then
+			return (targetRoot.CFrame * position.offset).Position
+		end
+	end
+
+	return nil
+end
+
+local function getFacingDirection(targetRoot)
+	local forward = targetRoot.CFrame.LookVector
+	local right = targetRoot.CFrame.RightVector
+
+	if facingMode == "Vorne" then
+		return forward
+
+	elseif facingMode == "Hinten" then
+		return -forward
+
+	elseif facingMode == "Links" then
+		return -right
+
+	elseif facingMode == "Rechts" then
+		return right
+
+	elseif facingMode == "Links vorne" then
+		return (forward - right).Unit
+
+	elseif facingMode == "Rechts vorne" then
+		return (forward + right).Unit
+	end
+
+	return forward
+end
+
+local function updateFollow(deltaTime)
+	local myRoot = getMyRoot()
+	local targetRoot = getTargetRoot()
+
+	if not myRoot or not targetRoot then
+		return
+	end
+
+	if orbitEnabled then
+		orbitAngle += orbitSpeed * deltaTime * orbitDirection
+
+		if orbitAngle >= 360 then
+			orbitAngle -= 360
+		elseif orbitAngle <= -360 then
+			orbitAngle += 360
+		end
+	end
+
+	local targetPosition = calculatePosition(targetRoot)
+
+	if not targetPosition then
+		return
+	end
+
+	local currentPositionVector = myRoot.Position
+
+	local newPosition = currentPositionVector:Lerp(
+		targetPosition,
+		math.clamp(FOLLOW_SMOOTHNESS * deltaTime, 0, 1)
+	)
+
+	-- =====================================================
+	-- CHARAKTER-AUSRICHTUNG
+	-- =====================================================
+
+	local facingDirection = getFacingDirection(targetRoot)
+
+	if facingDirection.Magnitude > 0.001 then
+		-- Nur horizontale Blickrichtung verwenden,
+		-- damit der Character nicht nach oben/unten kippt.
+
+		local horizontalDirection = Vector3.new(
+			facingDirection.X,
+			0,
+			facingDirection.Z
+		)
+
+		if horizontalDirection.Magnitude > 0.001 then
+			horizontalDirection = horizontalDirection.Unit
+
+			myRoot.CFrame = CFrame.lookAt(
+				newPosition,
+				newPosition + horizontalDirection,
+				Vector3.yAxis
+			)
+		else
+			myRoot.CFrame = CFrame.new(newPosition)
+		end
+	else
+		myRoot.CFrame = CFrame.new(newPosition)
+	end
+
+	-- =====================================================
+	-- STATUS
+	-- =====================================================
+
+	if orbitEnabled then
+		followStatus.Text =
+			"Orbit aktiv | Radius: " ..
+			tostring(orbitRadius) ..
+			" | Speed: " ..
+			tostring(orbitSpeed) ..
+			"°/s"
+	else
+		followStatus.Text =
+			"Position: " ..
+			tostring(currentPosition or "Keine") ..
+			" | Abstand: 6 Studs"
+	end
+end
+
+followConnection = RunService.RenderStepped:Connect(function(deltaTime)
+	updateFollow(deltaTime)
+end)
+
+-- =========================================================
+-- KEIN KAMERA-SYSTEM MEHR
+-- =========================================================
+--
+-- Wichtig:
+-- Es gibt absichtlich KEIN:
+--
+-- workspace.CurrentCamera.CFrame = ...
+-- workspace.CurrentCamera.FieldOfView = ...
+--
+-- Dadurch bleibt die normale Roblox-Kamera frei.
+--
+
+-- =========================================================
+-- KEYBOARD INPUT
+-- =========================================================
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then
+		return
+	end
+
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then
+		return
+	end
+
+	local keyCode = input.KeyCode
+
+	-- -----------------------------------------------------
+	-- Taste gerade festlegen
+	-- -----------------------------------------------------
+
+	if waitingForKey then
+
+		-- Escape = Abbrechen
+		if keyCode == Enum.KeyCode.Escape then
+			local oldName = waitingForKey
+			waitingForKey = nil
+			updateKeyButton(oldName)
+			return
+		end
+
+		local positionName = waitingForKey
+
+		if isKeyAlreadyUsed(keyCode, positionName) then
+			keyButtons[positionName].Text =
+				positionName .. ": bereits benutzt"
+
+			task.delay(1, function()
+				if waitingForKey == positionName then
+					keyButtons[positionName].Text =
+						positionName .. ": [ Taste drücken ]"
+				end
+			end)
+
+			return
+		end
+
+		keybinds[positionName] = keyCode
+		waitingForKey = nil
+
+		updateKeyButton(positionName)
+
+		return
+	end
+
+	-- -----------------------------------------------------
+	-- Normale Keyboard-Bindings
+	-- -----------------------------------------------------
+
+	for positionName, assignedKey in pairs(keybinds) do
+		if assignedKey == keyCode then
+			setPosition(positionName)
+			return
+		end
+	end
+
+	-- Hub mit M öffnen/schließen
+	if keyCode == Enum.KeyCode.M then
+		hub.Visible = not hub.Visible
+	end
+end)
+
+-- =========================================================
+-- TAB SWITCH
+-- =========================================================
+
+local allFrames = {
+	statusFrame,
+	moveFrame,
+	orbitFrame,
+	cameraFrame,
+	infoFrame
+}
+
+local function switchTab(index)
+	for i, frame in ipairs(allFrames) do
+		frame.Visible = (i == index)
+	end
+
+	for i, button in ipairs(tabButtons) do
+		if i == index then
+			button.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+			button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			button.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+			button.TextColor3 = Color3.fromRGB(200, 200, 220)
+		end
+	end
+
+	if index == 1 then
+		updateStatus()
+		updateModeUI()
+	end
+end
+
+for i, button in ipairs(tabButtons) do
+	button.Activated:Connect(function()
+		switchTab(i)
+	end)
+end
+
+-- =========================================================
+-- START
+-- =========================================================
+
+switchTab(1)
+updateCameraButtons()
+updatePositionButtons()
+updateModeUI()
+updateStatus()
+
+print("✅ MagnetRed Hub geladen")
+print("M = Hub ein/aus")
+print("🔴 Red → Blue / 🔵 Blue → Red Modus verfügbar")
