@@ -1,6 +1,6 @@
 -- LocalScript in StarterPlayerScripts
--- MagnetRed67 Hub
--- Mit ON/OFF, Close/Open und Drag-System
+-- MagnetRed Hub
+-- Bewegungsabstand frei einstellbar
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -110,7 +110,7 @@ stroke.Thickness = 2
 stroke.Parent = hub
 
 -- =========================================================
--- DRAG-SYSTEM FÜR HUB
+-- DRAG SYSTEM
 -- =========================================================
 
 local function makeDraggable(frame, dragObject)
@@ -217,10 +217,6 @@ openStroke.Color = Color3.fromRGB(100, 150, 255)
 openStroke.Thickness = 2
 openStroke.Parent = openButton
 
--- =========================================================
--- DRAGGING
--- =========================================================
-
 makeDraggable(hub, title)
 makeDraggable(openButton)
 
@@ -324,7 +320,7 @@ dotCorner.CornerRadius = UDim.new(1, 0)
 dotCorner.Parent = statusDot
 
 -- =========================================================
--- ON / OFF BUTTON
+-- BEWEGUNG ON / OFF
 -- =========================================================
 
 local movementToggle = Instance.new("TextButton")
@@ -361,7 +357,7 @@ movementToggle.Activated:Connect(function()
 end)
 
 -- =========================================================
--- MODUS-SWITCH
+-- MODUS SWITCH
 -- =========================================================
 
 local modeLabel = Instance.new("TextLabel")
@@ -459,41 +455,110 @@ moveFrame.Parent = content
 local moveTitle = Instance.new("TextLabel")
 moveTitle.Size = UDim2.new(1, 0, 0, 28)
 moveTitle.BackgroundTransparency = 1
-moveTitle.Text = "Position relativ zum Ziel – 6 Studs"
+moveTitle.Text = "Position relativ zum Ziel"
 moveTitle.TextScaled = true
 moveTitle.Font = Enum.Font.GothamBold
 moveTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
 moveTitle.Parent = moveFrame
 
+-- =========================================================
+-- FREIER STUDS-WERT
+-- =========================================================
+
+local distanceLabel = Instance.new("TextLabel")
+distanceLabel.Size = UDim2.new(0.55, 0, 0, 30)
+distanceLabel.Position = UDim2.new(0, 0, 0, 34)
+distanceLabel.BackgroundTransparency = 1
+distanceLabel.Text = "Abstand: 6 Studs"
+distanceLabel.TextScaled = true
+distanceLabel.Font = Enum.Font.GothamBold
+distanceLabel.TextColor3 = Color3.fromRGB(220, 220, 235)
+distanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+distanceLabel.Parent = moveFrame
+
+local distanceBox = Instance.new("TextBox")
+distanceBox.Size = UDim2.new(0.32, 0, 0, 34)
+distanceBox.Position = UDim2.new(0.64, 0, 0, 32)
+distanceBox.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+distanceBox.Text = "6"
+distanceBox.PlaceholderText = "Studs"
+distanceBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+distanceBox.TextScaled = true
+distanceBox.Font = Enum.Font.GothamBold
+distanceBox.ClearTextOnFocus = false
+distanceBox.BorderSizePixel = 0
+distanceBox.Parent = moveFrame
+
+local distanceCorner = Instance.new("UICorner")
+distanceCorner.CornerRadius = UDim.new(0, 7)
+distanceCorner.Parent = distanceBox
+
+local distanceStroke = Instance.new("UIStroke")
+distanceStroke.Color = Color3.fromRGB(80, 80, 120)
+distanceStroke.Thickness = 1
+distanceStroke.Parent = distanceBox
+
+-- Eingabe wird übernommen, sobald das Textfeld verlassen wird
+distanceBox.FocusLost:Connect(function()
+	local value = tonumber(distanceBox.Text)
+
+	if value then
+		-- Mindestwert 0.1 Stud, maximal 10000 Stud
+		FOLLOW_DISTANCE = math.clamp(value, 0.1, 10000)
+
+		distanceBox.Text = tostring(FOLLOW_DISTANCE)
+		distanceLabel.Text =
+			"Abstand: " .. tostring(FOLLOW_DISTANCE) .. " Studs"
+	else
+		-- Bei ungültiger Eingabe alten Wert wiederherstellen
+		distanceBox.Text = tostring(FOLLOW_DISTANCE)
+
+		distanceLabel.Text =
+			"Abstand: " .. tostring(FOLLOW_DISTANCE) .. " Studs"
+	end
+end)
+
 local positions = {
 	{
 		name = "Vorne",
-		offset = CFrame.new(0, 0, -FOLLOW_DISTANCE)
+		offset = function()
+			return CFrame.new(0, 0, -FOLLOW_DISTANCE)
+		end
 	},
 
 	{
 		name = "Hinten",
-		offset = CFrame.new(0, 0, FOLLOW_DISTANCE)
+		offset = function()
+			return CFrame.new(0, 0, FOLLOW_DISTANCE)
+		end
 	},
 
 	{
 		name = "Links",
-		offset = CFrame.new(-FOLLOW_DISTANCE, 0, 0)
+		offset = function()
+			return CFrame.new(-FOLLOW_DISTANCE, 0, 0)
+		end
 	},
 
 	{
 		name = "Rechts",
-		offset = CFrame.new(FOLLOW_DISTANCE, 0, 0)
+		offset = function()
+			return CFrame.new(FOLLOW_DISTANCE, 0, 0)
+		end
 	},
 
 	{
 		name = "Oben",
-		offset = CFrame.new(0, FOLLOW_DISTANCE, 0)
+		offset = function()
+			return CFrame.new(0, FOLLOW_DISTANCE, 0)
+		end
 	},
 
 	{
 		name = "Unten",
-		offset = CFrame.new(0, -FOLLOW_DISTANCE, 0)
+		offset = function()
+			return CFrame.new(0, -FOLLOW_DISTANCE, 0)
+		end
 	}
 }
 
@@ -501,7 +566,7 @@ local posButtons = {}
 
 local grid = Instance.new("Frame")
 grid.Size = UDim2.new(1, 0, 0, 150)
-grid.Position = UDim2.new(0, 0, 0, 38)
+grid.Position = UDim2.new(0, 0, 0, 78)
 grid.BackgroundTransparency = 1
 grid.Parent = moveFrame
 
@@ -634,6 +699,7 @@ radiusBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 radiusBox.TextScaled = true
 radiusBox.Font = Enum.Font.Gotham
 radiusBox.ClearTextOnFocus = false
+radiusBox.BorderSizePixel = 0
 radiusBox.Parent = orbitFrame
 
 local speedLabel = Instance.new("TextLabel")
@@ -656,15 +722,18 @@ speedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 speedBox.TextScaled = true
 speedBox.Font = Enum.Font.Gotham
 speedBox.ClearTextOnFocus = false
+speedBox.BorderSizePixel = 0
 speedBox.Parent = orbitFrame
 
 radiusBox.FocusLost:Connect(function()
 	local value = tonumber(radiusBox.Text)
 
 	if value and value > 0 then
-		orbitRadius = math.clamp(value, 1, 100)
+		orbitRadius = math.clamp(value, 1, 10000)
 		radiusBox.Text = tostring(orbitRadius)
 		radiusLabel.Text = "Orbit-Radius: " .. orbitRadius .. " Studs"
+	else
+		radiusBox.Text = tostring(orbitRadius)
 	end
 end)
 
@@ -675,6 +744,8 @@ speedBox.FocusLost:Connect(function()
 		orbitSpeed = math.clamp(value, 1, 1000)
 		speedBox.Text = tostring(orbitSpeed)
 		speedLabel.Text = "Orbit-Geschwindigkeit: " .. orbitSpeed .. "°/s"
+	else
+		speedBox.Text = tostring(orbitSpeed)
 	end
 end)
 
@@ -704,7 +775,7 @@ directionButton.Activated:Connect(function()
 end)
 
 -- =========================================================
--- KEYBOARD
+-- KEYBOARD BINDINGS
 -- =========================================================
 
 local keyboardTitle = Instance.new("TextLabel")
@@ -913,9 +984,9 @@ infoLabel.Text =
 	"MagnetRed Hub\n\n" ..
 	"• Zwei Bewegungsmodi\n" ..
 	"• Bewegung AN / AUS\n" ..
+	"• Frei einstellbarer Stud-Abstand\n" ..
 	"• Red kann Blue folgen\n" ..
 	"• Blue kann Red folgen\n" ..
-	"• Standard-Abstand: 6 Studs\n" ..
 	"• 6 relative Positionen\n" ..
 	"• Orbit mit eigener Geschwindigkeit\n" ..
 	"• Eigene Keyboard-Bindings\n" ..
@@ -966,7 +1037,9 @@ local function getTargetRoot()
 end
 
 local function calculatePosition(targetRoot)
+
 	if orbitEnabled then
+
 		local radians = math.rad(orbitAngle)
 
 		local offset = Vector3.new(
@@ -983,15 +1056,22 @@ local function calculatePosition(targetRoot)
 	end
 
 	for _, position in ipairs(positions) do
+
 		if position.name == currentPosition then
-			return (targetRoot.CFrame * position.offset).Position
+
+			-- Der Abstand wird JETZT bei jeder Berechnung
+			-- aus dem aktuellen Textfeld-Wert genommen.
+			return (targetRoot.CFrame * position.offset()).Position
+
 		end
+
 	end
 
 	return nil
 end
 
 local function getFacingDirection(targetRoot)
+
 	local forward = targetRoot.CFrame.LookVector
 	local right = targetRoot.CFrame.RightVector
 
@@ -1031,13 +1111,19 @@ local function updateFollow(deltaTime)
 	end
 
 	if orbitEnabled then
-		orbitAngle += orbitSpeed * deltaTime * orbitDirection
+
+		orbitAngle +=
+			orbitSpeed *
+			deltaTime *
+			orbitDirection
 
 		if orbitAngle >= 360 then
 			orbitAngle -= 360
+
 		elseif orbitAngle <= -360 then
 			orbitAngle += 360
 		end
+
 	end
 
 	local targetPosition = calculatePosition(targetRoot)
@@ -1048,37 +1134,52 @@ local function updateFollow(deltaTime)
 
 	local currentPositionVector = myRoot.Position
 
-	local newPosition = currentPositionVector:Lerp(
-		targetPosition,
-		math.clamp(FOLLOW_SMOOTHNESS * deltaTime, 0, 1)
-	)
+	local newPosition =
+		currentPositionVector:Lerp(
+			targetPosition,
+			math.clamp(
+				FOLLOW_SMOOTHNESS * deltaTime,
+				0,
+				1
+			)
+		)
 
-	local facingDirection = getFacingDirection(targetRoot)
+	local facingDirection =
+		getFacingDirection(targetRoot)
 
 	if facingDirection.Magnitude > 0.001 then
 
-		local horizontalDirection = Vector3.new(
-			facingDirection.X,
-			0,
-			facingDirection.Z
-		)
+		local horizontalDirection =
+			Vector3.new(
+				facingDirection.X,
+				0,
+				facingDirection.Z
+			)
 
 		if horizontalDirection.Magnitude > 0.001 then
 
-			horizontalDirection = horizontalDirection.Unit
+			horizontalDirection =
+				horizontalDirection.Unit
 
-			myRoot.CFrame = CFrame.lookAt(
-				newPosition,
-				newPosition + horizontalDirection,
-				Vector3.yAxis
-			)
+			myRoot.CFrame =
+				CFrame.lookAt(
+					newPosition,
+					newPosition + horizontalDirection,
+					Vector3.yAxis
+				)
 
 		else
-			myRoot.CFrame = CFrame.new(newPosition)
+
+			myRoot.CFrame =
+				CFrame.new(newPosition)
+
 		end
 
 	else
-		myRoot.CFrame = CFrame.new(newPosition)
+
+		myRoot.CFrame =
+			CFrame.new(newPosition)
+
 	end
 
 	if orbitEnabled then
@@ -1095,14 +1196,17 @@ local function updateFollow(deltaTime)
 		followStatus.Text =
 			"Position: " ..
 			tostring(currentPosition or "Keine") ..
-			" | Abstand: 6 Studs"
+			" | Abstand: " ..
+			tostring(FOLLOW_DISTANCE) ..
+			" Studs"
 
 	end
 end
 
-followConnection = RunService.RenderStepped:Connect(function(deltaTime)
-	updateFollow(deltaTime)
-end)
+followConnection =
+	RunService.RenderStepped:Connect(function(deltaTime)
+		updateFollow(deltaTime)
+	end)
 
 -- =========================================================
 -- KEYBOARD INPUT
@@ -1146,7 +1250,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 				if waitingForKey == positionName then
 
 					keyButtons[positionName].Text =
-						positionName .. ": [ Taste drücken ]"
+						positionName ..
+						": [ Taste drücken ]"
 
 				end
 
@@ -1156,6 +1261,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		end
 
 		keybinds[positionName] = keyCode
+
 		waitingForKey = nil
 
 		updateKeyButton(positionName)
@@ -1175,7 +1281,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	end
 
-	-- M = Hub öffnen/schließen
+	-- M = Hub ein/aus
 	if keyCode == Enum.KeyCode.M then
 
 		if hub.Visible then
@@ -1235,9 +1341,11 @@ local function switchTab(index)
 	end
 
 	if index == 1 then
+
 		updateStatus()
 		updateModeUI()
 		updateMovementToggle()
+
 	end
 
 end
@@ -1263,7 +1371,8 @@ updateMovementToggle()
 updateStatus()
 
 print("✅ MagnetRed Hub geladen")
-print("🟢 Bewegung AN/AUS verfügbar")
-print("✕ Close / OPEN verfügbar")
-print("🖐 Hub und Open-Button sind draggable")
+print("📏 Stud-Abstand frei einstellbar")
+print("🟢 Bewegung AN/AUS")
+print("✕ Close / OPEN")
+print("🖐 Hub draggable")
 print("M = Hub ein/aus")
