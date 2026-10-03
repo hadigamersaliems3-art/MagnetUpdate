@@ -1,10 +1,8 @@
 -- LocalScript in StarterPlayerScripts
 -- MagnetRed67 Hub
--- MagnetRed67 folgt MagnetBlue67
--- Unterstützt jetzt beide Bewegungsrichtungen
+-- Mit ON/OFF, Close/Open und Drag-System
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -13,8 +11,8 @@ local localPlayer = Players.LocalPlayer
 local RED_NAME = "MagnetRed67"
 local BLUE_NAME = "MagnetBlue67"
 
--- true  = MagnetRed67 bewegt sich -> MagnetBlue67 ist Ziel
--- false = MagnetBlue67 bewegt sich -> MagnetRed67 ist Ziel
+-- true  = Red bewegt sich -> Blue ist Ziel
+-- false = Blue bewegt sich -> Red ist Ziel
 local redFollowsBlue = true
 
 -- =========================================================
@@ -24,20 +22,21 @@ local redFollowsBlue = true
 local FOLLOW_DISTANCE = 6
 local FOLLOW_SMOOTHNESS = 12
 
+local movementEnabled = true
+
 local orbitEnabled = false
 local orbitRadius = 6
-local orbitSpeed = 45 -- Grad pro Sekunde
+local orbitSpeed = 45
 local orbitAngle = 0
 local orbitDirection = 1
 
 local currentPosition = nil
 local followConnection = nil
 
--- Charakter-Blickrichtung
 local facingMode = "Vorne"
 
 -- =========================================================
--- FUNKTIONEN FÜR RED / BLUE MODUS
+-- RED / BLUE
 -- =========================================================
 
 local function getMoverName()
@@ -88,6 +87,10 @@ sg.Name = "MagnetHub"
 sg.ResetOnSpawn = false
 sg.Parent = localPlayer:WaitForChild("PlayerGui")
 
+-- =========================================================
+-- HUB
+-- =========================================================
+
 local hub = Instance.new("Frame")
 hub.Name = "Hub"
 hub.Size = UDim2.new(0, 460, 0, 390)
@@ -107,11 +110,59 @@ stroke.Thickness = 2
 stroke.Parent = hub
 
 -- =========================================================
+-- DRAG-SYSTEM FÜR HUB
+-- =========================================================
+
+local function makeDraggable(frame, dragObject)
+	local dragging = false
+	local dragStart
+	local startPosition
+
+	dragObject = dragObject or frame
+
+	dragObject.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+
+			dragging = true
+			dragStart = input.Position
+			startPosition = frame.Position
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if not dragging then
+			return
+		end
+
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement
+			and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+
+		local delta = input.Position - dragStart
+
+		frame.Position = UDim2.new(
+			startPosition.X.Scale,
+			startPosition.X.Offset + delta.X,
+			startPosition.Y.Scale,
+			startPosition.Y.Offset + delta.Y
+		)
+	end)
+end
+
+-- =========================================================
 -- TITEL
 -- =========================================================
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 32)
+title.Size = UDim2.new(1, -65, 0, 32)
 title.Position = UDim2.new(0, 10, 0, 2)
 title.BackgroundTransparency = 1
 title.Text = "⚙️ MagnetRed Hub"
@@ -119,6 +170,73 @@ title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextScaled = true
 title.Font = Enum.Font.GothamBold
 title.Parent = hub
+
+-- =========================================================
+-- CLOSE BUTTON
+-- =========================================================
+
+local closeButton = Instance.new("TextButton")
+closeButton.Name = "CloseButton"
+closeButton.Size = UDim2.new(0, 36, 0, 30)
+closeButton.Position = UDim2.new(1, -45, 0, 4)
+closeButton.BackgroundColor3 = Color3.fromRGB(150, 45, 45)
+closeButton.Text = "✕"
+closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.TextScaled = true
+closeButton.Font = Enum.Font.GothamBold
+closeButton.BorderSizePixel = 0
+closeButton.Parent = hub
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 7)
+closeCorner.Parent = closeButton
+
+-- =========================================================
+-- OPEN BUTTON
+-- =========================================================
+
+local openButton = Instance.new("TextButton")
+openButton.Name = "OpenButton"
+openButton.Size = UDim2.new(0, 95, 0, 42)
+openButton.Position = UDim2.new(0, 20, 0.5, -21)
+openButton.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+openButton.Text = "⚙ OPEN"
+openButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+openButton.TextScaled = true
+openButton.Font = Enum.Font.GothamBold
+openButton.BorderSizePixel = 0
+openButton.Visible = false
+openButton.Parent = sg
+
+local openCorner = Instance.new("UICorner")
+openCorner.CornerRadius = UDim.new(0, 10)
+openCorner.Parent = openButton
+
+local openStroke = Instance.new("UIStroke")
+openStroke.Color = Color3.fromRGB(100, 150, 255)
+openStroke.Thickness = 2
+openStroke.Parent = openButton
+
+-- =========================================================
+-- DRAGGING
+-- =========================================================
+
+makeDraggable(hub, title)
+makeDraggable(openButton)
+
+-- =========================================================
+-- CLOSE / OPEN
+-- =========================================================
+
+closeButton.Activated:Connect(function()
+	hub.Visible = false
+	openButton.Visible = true
+end)
+
+openButton.Activated:Connect(function()
+	hub.Visible = true
+	openButton.Visible = false
+end)
 
 -- =========================================================
 -- TABS
@@ -186,8 +304,8 @@ statusFrame.BackgroundTransparency = 1
 statusFrame.Parent = content
 
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, 0, 0, 50)
-statusLabel.Position = UDim2.new(0, 0, 0.04, 0)
+statusLabel.Size = UDim2.new(1, 0, 0, 45)
+statusLabel.Position = UDim2.new(0, 0, 0.02, 0)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "MagnetBlue67: ?"
 statusLabel.TextScaled = true
@@ -196,8 +314,8 @@ statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 statusLabel.Parent = statusFrame
 
 local statusDot = Instance.new("Frame")
-statusDot.Size = UDim2.new(0, 30, 0, 30)
-statusDot.Position = UDim2.new(0.5, -15, 0.31, 0)
+statusDot.Size = UDim2.new(0, 25, 0, 25)
+statusDot.Position = UDim2.new(0.5, -12, 0.22, 0)
 statusDot.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
 statusDot.Parent = statusFrame
 
@@ -206,12 +324,49 @@ dotCorner.CornerRadius = UDim.new(1, 0)
 dotCorner.Parent = statusDot
 
 -- =========================================================
+-- ON / OFF BUTTON
+-- =========================================================
+
+local movementToggle = Instance.new("TextButton")
+movementToggle.Size = UDim2.new(0.82, 0, 0, 45)
+movementToggle.Position = UDim2.new(0.09, 0, 0.30, 0)
+movementToggle.BorderSizePixel = 0
+movementToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+movementToggle.TextScaled = true
+movementToggle.Font = Enum.Font.GothamBold
+movementToggle.Parent = statusFrame
+
+local movementToggleCorner = Instance.new("UICorner")
+movementToggleCorner.CornerRadius = UDim.new(0, 8)
+movementToggleCorner.Parent = movementToggle
+
+local function updateMovementToggle()
+	if movementEnabled then
+		movementToggle.Text = "🟢 BEWEGUNG: AN"
+		movementToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 70)
+	else
+		movementToggle.Text = "🔴 BEWEGUNG: AUS"
+		movementToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+	end
+end
+
+movementToggle.Activated:Connect(function()
+	movementEnabled = not movementEnabled
+
+	if not movementEnabled then
+		orbitAngle = 0
+	end
+
+	updateMovementToggle()
+end)
+
+-- =========================================================
 -- MODUS-SWITCH
 -- =========================================================
 
 local modeLabel = Instance.new("TextLabel")
 modeLabel.Size = UDim2.new(1, 0, 0, 25)
-modeLabel.Position = UDim2.new(0, 0, 0.48, 0)
+modeLabel.Position = UDim2.new(0, 0, 0.47, 0)
 modeLabel.BackgroundTransparency = 1
 modeLabel.Text = "Bewegungsmodus"
 modeLabel.TextScaled = true
@@ -221,7 +376,7 @@ modeLabel.Parent = statusFrame
 
 local modeButton = Instance.new("TextButton")
 modeButton.Size = UDim2.new(0.82, 0, 0, 42)
-modeButton.Position = UDim2.new(0.09, 0, 0.59, 0)
+modeButton.Position = UDim2.new(0.09, 0, 0.57, 0)
 modeButton.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
 modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 modeButton.TextScaled = true
@@ -258,13 +413,15 @@ local function updateStatus()
 
 	if target then
 		statusLabel.Text =
-			"✅ Ziel: " .. getTargetName() .. " | Beweger: " .. getMoverName()
+			"✅ Ziel: " .. getTargetName() ..
+			" | Beweger: " .. getMoverName()
 
 		statusLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
 		statusDot.BackgroundColor3 = Color3.fromRGB(80, 255, 80)
 	else
 		statusLabel.Text =
-			"❌ Ziel: " .. getTargetName() .. " ist NICHT im Spiel"
+			"❌ Ziel: " .. getTargetName() ..
+			" ist NICHT im Spiel"
 
 		statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
 		statusDot.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
@@ -275,7 +432,7 @@ local function updateStatus()
 			"⚠️ " ..
 			getMoverName() ..
 			" ist nicht dein eigener Character.\n" ..
-			"Dieses LocalScript kann nur deinen eigenen Character bewegen."
+			"Dieses LocalScript kann nur deinen Character bewegen."
 	end
 end
 
@@ -409,7 +566,7 @@ followStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
 followStatus.Parent = moveFrame
 
 -- =========================================================
--- TAB 3: ORBIT + KEYBOARD
+-- TAB 3: ORBIT
 -- =========================================================
 
 local orbitFrame = Instance.new("Frame")
@@ -547,7 +704,7 @@ directionButton.Activated:Connect(function()
 end)
 
 -- =========================================================
--- KEYBOARD-BINDINGS
+-- KEYBOARD
 -- =========================================================
 
 local keyboardTitle = Instance.new("TextLabel")
@@ -733,7 +890,7 @@ cameraNotice.BackgroundTransparency = 1
 cameraNotice.Text =
 	"FOV wird nicht verändert.\n" ..
 	"Die Roblox-Kamera bleibt normal steuerbar.\n" ..
-	"Nur die Blickrichtung des bewegten Characters wird geändert."
+	"Nur die Blickrichtung des Characters wird geändert."
 
 cameraNotice.TextScaled = true
 cameraNotice.Font = Enum.Font.Gotham
@@ -755,6 +912,7 @@ infoLabel.BackgroundTransparency = 1
 infoLabel.Text =
 	"MagnetRed Hub\n\n" ..
 	"• Zwei Bewegungsmodi\n" ..
+	"• Bewegung AN / AUS\n" ..
 	"• Red kann Blue folgen\n" ..
 	"• Blue kann Red folgen\n" ..
 	"• Standard-Abstand: 6 Studs\n" ..
@@ -762,7 +920,8 @@ infoLabel.Text =
 	"• Orbit mit eigener Geschwindigkeit\n" ..
 	"• Eigene Keyboard-Bindings\n" ..
 	"• Charakter-Ausrichtung unabhängig von der Kamera\n" ..
-	"• FOV bleibt unverändert\n\n" ..
+	"• FOV bleibt unverändert\n" ..
+	"• Hub minimierbar und draggable\n\n" ..
 	"M = Hub ein/aus"
 
 infoLabel.TextScaled = true
@@ -777,8 +936,9 @@ infoLabel.Parent = infoFrame
 -- =========================================================
 
 local function getMyRoot()
-	-- Ein LocalScript kann zuverlässig nur den eigenen
-	-- Character kontinuierlich per CFrame bewegen.
+	if not movementEnabled then
+		return nil
+	end
 
 	local mover = getMover()
 
@@ -858,6 +1018,11 @@ local function getFacingDirection(targetRoot)
 end
 
 local function updateFollow(deltaTime)
+
+	if not movementEnabled then
+		return
+	end
+
 	local myRoot = getMyRoot()
 	local targetRoot = getTargetRoot()
 
@@ -888,15 +1053,9 @@ local function updateFollow(deltaTime)
 		math.clamp(FOLLOW_SMOOTHNESS * deltaTime, 0, 1)
 	)
 
-	-- =====================================================
-	-- CHARAKTER-AUSRICHTUNG
-	-- =====================================================
-
 	local facingDirection = getFacingDirection(targetRoot)
 
 	if facingDirection.Magnitude > 0.001 then
-		-- Nur horizontale Blickrichtung verwenden,
-		-- damit der Character nicht nach oben/unten kippt.
 
 		local horizontalDirection = Vector3.new(
 			facingDirection.X,
@@ -905,6 +1064,7 @@ local function updateFollow(deltaTime)
 		)
 
 		if horizontalDirection.Magnitude > 0.001 then
+
 			horizontalDirection = horizontalDirection.Unit
 
 			myRoot.CFrame = CFrame.lookAt(
@@ -912,29 +1072,31 @@ local function updateFollow(deltaTime)
 				newPosition + horizontalDirection,
 				Vector3.yAxis
 			)
+
 		else
 			myRoot.CFrame = CFrame.new(newPosition)
 		end
+
 	else
 		myRoot.CFrame = CFrame.new(newPosition)
 	end
 
-	-- =====================================================
-	-- STATUS
-	-- =====================================================
-
 	if orbitEnabled then
+
 		followStatus.Text =
 			"Orbit aktiv | Radius: " ..
 			tostring(orbitRadius) ..
 			" | Speed: " ..
 			tostring(orbitSpeed) ..
 			"°/s"
+
 	else
+
 		followStatus.Text =
 			"Position: " ..
 			tostring(currentPosition or "Keine") ..
 			" | Abstand: 6 Studs"
+
 	end
 end
 
@@ -943,23 +1105,11 @@ followConnection = RunService.RenderStepped:Connect(function(deltaTime)
 end)
 
 -- =========================================================
--- KEIN KAMERA-SYSTEM MEHR
--- =========================================================
---
--- Wichtig:
--- Es gibt absichtlich KEIN:
---
--- workspace.CurrentCamera.CFrame = ...
--- workspace.CurrentCamera.FieldOfView = ...
---
--- Dadurch bleibt die normale Roblox-Kamera frei.
---
-
--- =========================================================
 -- KEYBOARD INPUT
 -- =========================================================
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
+
 	if gameProcessed then
 		return
 	end
@@ -970,31 +1120,36 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	local keyCode = input.KeyCode
 
-	-- -----------------------------------------------------
-	-- Taste gerade festlegen
-	-- -----------------------------------------------------
-
+	-- Keybind einstellen
 	if waitingForKey then
 
-		-- Escape = Abbrechen
 		if keyCode == Enum.KeyCode.Escape then
+
 			local oldName = waitingForKey
+
 			waitingForKey = nil
+
 			updateKeyButton(oldName)
+
 			return
 		end
 
 		local positionName = waitingForKey
 
 		if isKeyAlreadyUsed(keyCode, positionName) then
+
 			keyButtons[positionName].Text =
 				positionName .. ": bereits benutzt"
 
 			task.delay(1, function()
+
 				if waitingForKey == positionName then
+
 					keyButtons[positionName].Text =
 						positionName .. ": [ Taste drücken ]"
+
 				end
+
 			end)
 
 			return
@@ -1008,21 +1163,35 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		return
 	end
 
-	-- -----------------------------------------------------
-	-- Normale Keyboard-Bindings
-	-- -----------------------------------------------------
-
+	-- Position-Keybinds
 	for positionName, assignedKey in pairs(keybinds) do
+
 		if assignedKey == keyCode then
+
 			setPosition(positionName)
+
 			return
 		end
+
 	end
 
-	-- Hub mit M öffnen/schließen
+	-- M = Hub öffnen/schließen
 	if keyCode == Enum.KeyCode.M then
-		hub.Visible = not hub.Visible
+
+		if hub.Visible then
+
+			hub.Visible = false
+			openButton.Visible = true
+
+		else
+
+			hub.Visible = true
+			openButton.Visible = false
+
+		end
+
 	end
+
 end)
 
 -- =========================================================
@@ -1038,30 +1207,47 @@ local allFrames = {
 }
 
 local function switchTab(index)
+
 	for i, frame in ipairs(allFrames) do
 		frame.Visible = (i == index)
 	end
 
 	for i, button in ipairs(tabButtons) do
+
 		if i == index then
-			button.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
-			button.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+			button.BackgroundColor3 =
+				Color3.fromRGB(60, 120, 255)
+
+			button.TextColor3 =
+				Color3.fromRGB(255, 255, 255)
+
 		else
-			button.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-			button.TextColor3 = Color3.fromRGB(200, 200, 220)
+
+			button.BackgroundColor3 =
+				Color3.fromRGB(40, 40, 55)
+
+			button.TextColor3 =
+				Color3.fromRGB(200, 200, 220)
+
 		end
+
 	end
 
 	if index == 1 then
 		updateStatus()
 		updateModeUI()
+		updateMovementToggle()
 	end
+
 end
 
 for i, button in ipairs(tabButtons) do
+
 	button.Activated:Connect(function()
 		switchTab(i)
 	end)
+
 end
 
 -- =========================================================
@@ -1069,11 +1255,15 @@ end
 -- =========================================================
 
 switchTab(1)
+
 updateCameraButtons()
 updatePositionButtons()
 updateModeUI()
+updateMovementToggle()
 updateStatus()
 
 print("✅ MagnetRed Hub geladen")
+print("🟢 Bewegung AN/AUS verfügbar")
+print("✕ Close / OPEN verfügbar")
+print("🖐 Hub und Open-Button sind draggable")
 print("M = Hub ein/aus")
-print("🔴 Red → Blue / 🔵 Blue → Red Modus verfügbar")
