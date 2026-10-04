@@ -1,6 +1,5 @@
--- LocalScript in StarterPlayerScripts
--- MagnetRed Hub
--- Bewegungsabstand frei einstellbar + Tween / Teleport Modi
+-- LocalScript in StarterPlayerScripts / Executor
+-- Magnet Hub v3 (3 Ziel-Modi mit dedizierten Buttons)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -13,7 +12,10 @@ local RED_NAME = "MagnetRed67"
 local BLUE_NAME = "MagnetBlue67"
 local YELLOW_NAME = "MagnetYellow67"
 
--- Modus-Zustand: 1 = Red folgt Blue, 2 = Blue folgt Yellow, 3 = Yellow folgt Red
+-- Target-Modus: 
+-- 1 = Target ist Blue (Red & Yellow folgen Blue)
+-- 2 = Target ist Yellow (Red & Blue folgen Yellow)
+-- 3 = Target ist Red (Blue & Yellow folgen Red)
 local targetModeIndex = 1 
 
 -- =========================================================
@@ -25,13 +27,12 @@ local FOLLOW_SMOOTHNESS = 12
 
 local movementEnabled = true
 
--- Neue Bewegungsmodi (Exklusiv: "Off", "Tween", "Teleport")
 local tapMovementMode = "Off" 
-local tweenSpeed = 0.2         -- Dauer des Tweens in Sekunden
-local teleportInterval = 0.05  -- Teleport-Intervall in Sekunden (Ticks)
+local tweenSpeed = 0.2         
+local teleportInterval = 0.05  
 local lastTeleportTime = 0
 
-local activeTween = nil        -- Aktiver Tween Speicherung
+local activeTween = nil        
 
 local orbitEnabled = false
 local orbitRadius = 6
@@ -45,18 +46,8 @@ local followConnection = nil
 local facingMode = "Vorne"
 
 -- =========================================================
--- RED / BLUE / YELLOW SELEKTION
+-- ZIEL / TARGET SELEKTION
 -- =========================================================
-
-local function getMoverName()
-	if targetModeIndex == 1 then
-		return RED_NAME
-	elseif targetModeIndex == 2 then
-		return BLUE_NAME
-	else
-		return YELLOW_NAME
-	end
-end
 
 local function getTargetName()
 	if targetModeIndex == 1 then
@@ -66,10 +57,6 @@ local function getTargetName()
 	else
 		return RED_NAME
 	end
-end
-
-local function getMover()
-	return Players:FindFirstChild(getMoverName())
 end
 
 local function getTarget()
@@ -106,8 +93,8 @@ sg.Parent = localPlayer:WaitForChild("PlayerGui")
 
 local hub = Instance.new("Frame")
 hub.Name = "Hub"
-hub.Size = UDim2.new(0, 460, 0, 450)
-hub.Position = UDim2.new(0.5, -230, 0.5, -225)
+hub.Size = UDim2.new(0, 460, 0, 480)
+hub.Position = UDim2.new(0.5, -230, 0.5, -240)
 hub.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 hub.BackgroundTransparency = 0.08
 hub.BorderSizePixel = 0
@@ -292,8 +279,8 @@ statusFrame.BackgroundTransparency = 1
 statusFrame.Parent = content
 
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, 0, 0, 45)
-statusLabel.Position = UDim2.new(0, 0, 0.02, 0)
+statusLabel.Size = UDim2.new(1, 0, 0, 35)
+statusLabel.Position = UDim2.new(0, 0, 0, 0)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "Magnet: ?"
 statusLabel.TextScaled = true
@@ -301,19 +288,9 @@ statusLabel.Font = Enum.Font.GothamBold
 statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 statusLabel.Parent = statusFrame
 
-local statusDot = Instance.new("Frame")
-statusDot.Size = UDim2.new(0, 25, 0, 25)
-statusDot.Position = UDim2.new(0.5, -12, 0.22, 0)
-statusDot.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-statusDot.Parent = statusFrame
-
-local dotCorner = Instance.new("UICorner")
-dotCorner.CornerRadius = UDim.new(1, 0)
-dotCorner.Parent = statusDot
-
 local movementToggle = Instance.new("TextButton")
-movementToggle.Size = UDim2.new(0.82, 0, 0, 45)
-movementToggle.Position = UDim2.new(0.09, 0, 0.30, 0)
+movementToggle.Size = UDim2.new(0.82, 0, 0, 38)
+movementToggle.Position = UDim2.new(0.09, 0, 0.10, 0)
 movementToggle.BorderSizePixel = 0
 movementToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 movementToggle.TextScaled = true
@@ -341,81 +318,93 @@ movementToggle.Activated:Connect(function()
 end)
 
 local modeLabel = Instance.new("TextLabel")
-modeLabel.Size = UDim2.new(1, 0, 0, 25)
-modeLabel.Position = UDim2.new(0, 0, 0.47, 0)
+modeLabel.Size = UDim2.new(1, 0, 0, 22)
+modeLabel.Position = UDim2.new(0, 0, 0.22, 0)
 modeLabel.BackgroundTransparency = 1
-modeLabel.Text = "Bewegungsmodus"
+modeLabel.Text = "Wähle den Ziel-Magneten:"
 modeLabel.TextScaled = true
 modeLabel.Font = Enum.Font.GothamBold
 modeLabel.TextColor3 = Color3.fromRGB(220, 220, 235)
 modeLabel.Parent = statusFrame
 
-local modeButton = Instance.new("TextButton")
-modeButton.Size = UDim2.new(0.82, 0, 0, 42)
-modeButton.Position = UDim2.new(0.09, 0, 0.57, 0)
-modeButton.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
-modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-modeButton.TextScaled = true
-modeButton.Font = Enum.Font.GothamBold
-modeButton.BorderSizePixel = 0
-modeButton.Parent = statusFrame
+-- NEUE DREI BUTTONS FÜR MODE-SELEKTION
+local btnMode1 = Instance.new("TextButton")
+btnMode1.Size = UDim2.new(0.9, 0, 0, 36)
+btnMode1.Position = UDim2.new(0.05, 0, 0.29, 0)
+btnMode1.Text = "🔴 Red & 🟡 Yellow  ➔  relativ zu 🔵 Blue"
+btnMode1.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnMode1.TextScaled = true
+btnMode1.Font = Enum.Font.GothamBold
+btnMode1.BorderSizePixel = 0
+btnMode1.Parent = statusFrame
+Instance.new("UICorner", btnMode1).CornerRadius = UDim.new(0, 8)
 
-local modeCorner = Instance.new("UICorner")
-modeCorner.CornerRadius = UDim.new(0, 8)
-modeCorner.Parent = modeButton
+local btnMode2 = Instance.new("TextButton")
+btnMode2.Size = UDim2.new(0.9, 0, 0, 36)
+btnMode2.Position = UDim2.new(0.05, 0, 0.40, 0)
+btnMode2.Text = "🔴 Red & 🔵 Blue  ➔  relativ zu 🟡 Yellow"
+btnMode2.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnMode2.TextScaled = true
+btnMode2.Font = Enum.Font.GothamBold
+btnMode2.BorderSizePixel = 0
+btnMode2.Parent = statusFrame
+Instance.new("UICorner", btnMode2).CornerRadius = UDim.new(0, 8)
+
+local btnMode3 = Instance.new("TextButton")
+btnMode3.Size = UDim2.new(0.9, 0, 0, 36)
+btnMode3.Position = UDim2.new(0.05, 0, 0.51, 0)
+btnMode3.Text = "🔵 Blue & 🟡 Yellow  ➔  relativ zu 🔴 Red"
+btnMode3.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnMode3.TextScaled = true
+btnMode3.Font = Enum.Font.GothamBold
+btnMode3.BorderSizePixel = 0
+btnMode3.Parent = statusFrame
+Instance.new("UICorner", btnMode3).CornerRadius = UDim.new(0, 8)
 
 local modeInfo = Instance.new("TextLabel")
-modeInfo.Size = UDim2.new(1, 0, 0, 40)
-modeInfo.Position = UDim2.new(0, 0, 0.77, 0)
+modeInfo.Size = UDim2.new(1, 0, 0, 50)
+modeInfo.Position = UDim2.new(0, 0, 0.63, 0)
 modeInfo.BackgroundTransparency = 1
 modeInfo.TextScaled = true
 modeInfo.Font = Enum.Font.Gotham
 modeInfo.TextColor3 = Color3.fromRGB(180, 180, 200)
 modeInfo.Parent = statusFrame
 
-local function updateModeUI()
-	if targetModeIndex == 1 then
-		modeButton.Text = "🔴 Red bewegt sich → 🔵 Blue"
-		modeInfo.Text = "MagnetRed67 wird relativ zu MagnetBlue67 bewegt."
-	elseif targetModeIndex == 2 then
-		modeButton.Text = "🔵 Blue bewegt sich → 🟡 Yellow"
-		modeInfo.Text = "MagnetBlue67 wird relativ zu MagnetYellow67 bewegt."
-	else
-		modeButton.Text = "🟡 Yellow bewegt sich → 🔴 Red"
-		modeInfo.Text = "MagnetYellow67 wird relativ zu MagnetRed67 bewegt."
-	end
-end
-
-local function updateStatus()
-	local mover = getMover()
-	local target = getTarget()
-
-	if target then
-		statusLabel.Text = "✅ Ziel: " .. getTargetName() .. " | Beweger: " .. getMoverName()
-		statusLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
-		statusDot.BackgroundColor3 = Color3.fromRGB(80, 255, 80)
-	else
-		statusLabel.Text = "❌ Ziel: " .. getTargetName() .. " ist NICHT im Spiel"
-		statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-		statusDot.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
-	end
-
-	if mover ~= localPlayer then
-		modeInfo.Text = "⚠️ " .. getMoverName() .. " ist nicht dein eigener Character.\nDieses LocalScript kann nur deinen Character bewegen."
-	end
-end
-
-modeButton.Activated:Connect(function()
-	targetModeIndex = targetModeIndex + 1
-	if targetModeIndex > 3 then
-		targetModeIndex = 1
-	end
+local function setTargetMode(modeIdx)
+	targetModeIndex = modeIdx
 	orbitEnabled = false
 	orbitAngle = 0
 	currentPosition = nil
-	updateModeUI()
-	updateStatus()
-end)
+	
+	btnMode1.BackgroundColor3 = (modeIdx == 1) and Color3.fromRGB(60, 120, 255) or Color3.fromRGB(40, 40, 55)
+	btnMode2.BackgroundColor3 = (modeIdx == 2) and Color3.fromRGB(60, 120, 255) or Color3.fromRGB(40, 40, 55)
+	btnMode3.BackgroundColor3 = (modeIdx == 3) and Color3.fromRGB(60, 120, 255) or Color3.fromRGB(40, 40, 55)
+
+	local target = getTarget()
+	if target then
+		statusLabel.Text = "✅ Ziel geladen: " .. getTargetName()
+		statusLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
+	else
+		statusLabel.Text = "❌ Ziel '" .. getTargetName() .. "' NICHT im Spiel"
+		statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+	end
+
+	if modeIdx == 1 then
+		modeInfo.Text = "Ziel ist MagnetBlue67.\nMagnetRed67 & MagnetYellow67 richten sich an Blue aus."
+	elseif modeIdx == 2 then
+		modeInfo.Text = "Ziel ist MagnetYellow67.\nMagnetRed67 & MagnetBlue67 richten sich an Yellow aus."
+	else
+		modeInfo.Text = "Ziel ist MagnetRed67.\nMagnetBlue67 & MagnetYellow67 richten sich an Red aus."
+	end
+end
+
+btnMode1.Activated:Connect(function() setTargetMode(1) end)
+btnMode2.Activated:Connect(function() setTargetMode(2) end)
+btnMode3.Activated:Connect(function() setTargetMode(3) end)
+
+local function updateStatus()
+	setTargetMode(targetModeIndex)
+end
 
 -- =========================================================
 -- TAB 2: BEWEGUNG & TWEEN/TELEPORT MODI
@@ -435,7 +424,6 @@ moveTitle.Font = Enum.Font.GothamBold
 moveTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
 moveTitle.Parent = moveFrame
 
--- FREIER STUDS-WERT
 local distanceLabel = Instance.new("TextLabel")
 distanceLabel.Size = UDim2.new(0.55, 0, 0, 28)
 distanceLabel.Position = UDim2.new(0, 0, 0, 28)
@@ -536,10 +524,6 @@ for i, pos in ipairs(positions) do
 	btn.Activated:Connect(function() setPosition(pos.name) end)
 end
 
--- =========================================================
--- MODI SPEZIELL FÜR TAP BEWEGUNG (TWEEN & TELEPORT)
--- =========================================================
-
 local modesTitle = Instance.new("TextLabel")
 modesTitle.Size = UDim2.new(1, 0, 0, 22)
 modesTitle.Position = UDim2.new(0, 0, 0, 175)
@@ -550,7 +534,6 @@ modesTitle.Font = Enum.Font.GothamBold
 modesTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
 modesTitle.Parent = moveFrame
 
--- Tween Modus Button
 local tweenBtn = Instance.new("TextButton")
 tweenBtn.Size = UDim2.new(0.48, 0, 0, 32)
 tweenBtn.Position = UDim2.new(0, 0, 0, 202)
@@ -565,7 +548,6 @@ local tweenCorner = Instance.new("UICorner")
 tweenCorner.CornerRadius = UDim.new(0, 6)
 tweenCorner.Parent = tweenBtn
 
--- Teleport Modus Button
 local teleportBtn = Instance.new("TextButton")
 teleportBtn.Size = UDim2.new(0.48, 0, 0, 32)
 teleportBtn.Position = UDim2.new(0.52, 0, 0, 202)
@@ -580,7 +562,6 @@ local teleportCorner = Instance.new("UICorner")
 teleportCorner.CornerRadius = UDim.new(0, 6)
 teleportCorner.Parent = teleportBtn
 
--- Tween Speed Field
 local tweenBox = Instance.new("TextBox")
 tweenBox.Size = UDim2.new(0.48, 0, 0, 28)
 tweenBox.Position = UDim2.new(0, 0, 0, 240)
@@ -597,7 +578,6 @@ local tweenBoxCorner = Instance.new("UICorner")
 tweenBoxCorner.CornerRadius = UDim.new(0, 6)
 tweenBoxCorner.Parent = tweenBox
 
--- Teleport Ticks Field
 local teleportBox = Instance.new("TextBox")
 teleportBox.Size = UDim2.new(0.48, 0, 0, 28)
 teleportBox.Position = UDim2.new(0.52, 0, 0, 240)
@@ -818,7 +798,6 @@ directionButton.Activated:Connect(function()
 	end
 end)
 
--- KEYBOARD BINDINGS
 local keyboardTitle = Instance.new("TextLabel")
 keyboardTitle.Size = UDim2.new(1, 0, 0, 24)
 keyboardTitle.Position = UDim2.new(0, 0, 0, 260)
@@ -973,7 +952,7 @@ infoLabel.Size = UDim2.new(1, 0, 1, 0)
 infoLabel.BackgroundTransparency = 1
 infoLabel.Text =
 	"Magnet Hub\n\n" ..
-	"• 3 Magneten-Auswahl (Red, Blue, Yellow)\n" ..
+	"• 3 direkte Ziel-Modi (Blue, Yellow, Red)\n" ..
 	"• Bewegung & Modi (Tween, Teleport)\n" ..
 	"• Unabhängige Werte für Tween-Speed & Ticks\n" ..
 	"• Orbit mit eigener Geschwindigkeit\n" ..
@@ -994,8 +973,6 @@ infoLabel.Parent = infoFrame
 
 local function getMyRoot()
 	if not movementEnabled then return nil end
-	local mover = getMover()
-	if mover ~= localPlayer then return nil end
 	local character = localPlayer.Character
 	if not character then return nil end
 	return character:FindFirstChild("HumanoidRootPart")
@@ -1040,6 +1017,9 @@ end
 local function updateFollow(deltaTime)
 	if not movementEnabled then return end
 
+	-- Prüfen, ob der eigene Charakter das Ziel ist (falls ja, nicht selbst folgen)
+	if localPlayer.Name == getTargetName() then return end
+
 	local myRoot = getMyRoot()
 	local targetRoot = getTargetRoot()
 
@@ -1069,7 +1049,6 @@ local function updateFollow(deltaTime)
 		targetCFrame = CFrame.new(targetPosition)
 	end
 
-	-- MODI UNTERSCHEIDUNG
 	if tapMovementMode == "Tween" then
 		if activeTween then activeTween:Cancel() end
 		local tweenInfo = TweenInfo.new(tweenSpeed, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -1084,7 +1063,6 @@ local function updateFollow(deltaTime)
 		end
 
 	else
-		-- Standard Lerp Bewegung
 		local currentPositionVector = myRoot.Position
 		local newPosition = currentPositionVector:Lerp(targetPosition, math.clamp(FOLLOW_SMOOTHNESS * deltaTime, 0, 1))
 
@@ -1188,7 +1166,6 @@ local function switchTab(index)
 
 	if index == 1 then
 		updateStatus()
-		updateModeUI()
 		updateMovementToggle()
 	end
 end
@@ -1205,8 +1182,7 @@ switchTab(1)
 updateCameraButtons()
 updatePositionButtons()
 updateTapModeUI()
-updateModeUI()
 updateMovementToggle()
 updateStatus()
 
-print("✅ Magnet Hub mit Red/Blue/Yellow geladen")
+print("✅ Magnet Hub geladen (Separates Button-System)")
