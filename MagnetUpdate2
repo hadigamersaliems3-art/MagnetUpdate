@@ -11,10 +11,10 @@ local localPlayer = Players.LocalPlayer
 
 local RED_NAME = "MagnetRed67"
 local BLUE_NAME = "MagnetBlue67"
+local YELLOW_NAME = "MagnetYellow67"
 
--- true  = Red bewegt sich -> Blue ist Ziel
--- false = Blue bewegt sich -> Red ist Ziel
-local redFollowsBlue = true
+-- Modus-Zustand: 1 = Red folgt Blue, 2 = Blue folgt Yellow, 3 = Yellow folgt Red
+local targetModeIndex = 1 
 
 -- =========================================================
 -- EINSTELLUNGEN
@@ -45,20 +45,24 @@ local followConnection = nil
 local facingMode = "Vorne"
 
 -- =========================================================
--- RED / BLUE
+-- RED / BLUE / YELLOW SELEKTION
 -- =========================================================
 
 local function getMoverName()
-	if redFollowsBlue then
+	if targetModeIndex == 1 then
 		return RED_NAME
-	else
+	elseif targetModeIndex == 2 then
 		return BLUE_NAME
+	else
+		return YELLOW_NAME
 	end
 end
 
 local function getTargetName()
-	if redFollowsBlue then
+	if targetModeIndex == 1 then
 		return BLUE_NAME
+	elseif targetModeIndex == 2 then
+		return YELLOW_NAME
 	else
 		return RED_NAME
 	end
@@ -172,7 +176,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -65, 0, 32)
 title.Position = UDim2.new(0, 10, 0, 2)
 title.BackgroundTransparency = 1
-title.Text = "⚙️ MagnetRed Hub"
+title.Text = "⚙️ Magnet Hub"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextScaled = true
 title.Font = Enum.Font.GothamBold
@@ -291,7 +295,7 @@ local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, 0, 0, 45)
 statusLabel.Position = UDim2.new(0, 0, 0.02, 0)
 statusLabel.BackgroundTransparency = 1
-statusLabel.Text = "MagnetBlue67: ?"
+statusLabel.Text = "Magnet: ?"
 statusLabel.TextScaled = true
 statusLabel.Font = Enum.Font.GothamBold
 statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -370,12 +374,15 @@ modeInfo.TextColor3 = Color3.fromRGB(180, 180, 200)
 modeInfo.Parent = statusFrame
 
 local function updateModeUI()
-	if redFollowsBlue then
+	if targetModeIndex == 1 then
 		modeButton.Text = "🔴 Red bewegt sich → 🔵 Blue"
 		modeInfo.Text = "MagnetRed67 wird relativ zu MagnetBlue67 bewegt."
+	elseif targetModeIndex == 2 then
+		modeButton.Text = "🔵 Blue bewegt sich → 🟡 Yellow"
+		modeInfo.Text = "MagnetBlue67 wird relativ zu MagnetYellow67 bewegt."
 	else
-		modeButton.Text = "🔵 Blue bewegt sich → 🔴 Red"
-		modeInfo.Text = "MagnetBlue67 wird relativ zu MagnetRed67 bewegt."
+		modeButton.Text = "🟡 Yellow bewegt sich → 🔴 Red"
+		modeInfo.Text = "MagnetYellow67 wird relativ zu MagnetRed67 bewegt."
 	end
 end
 
@@ -399,7 +406,10 @@ local function updateStatus()
 end
 
 modeButton.Activated:Connect(function()
-	redFollowsBlue = not redFollowsBlue
+	targetModeIndex = targetModeIndex + 1
+	if targetModeIndex > 3 then
+		targetModeIndex = 1
+	end
 	orbitEnabled = false
 	orbitAngle = 0
 	currentPosition = nil
@@ -527,7 +537,7 @@ for i, pos in ipairs(positions) do
 end
 
 -- =========================================================
--- NEU: MODI SPEZIELL FÜR TAP BEWEGUNG (TWEEN & TELEPORT)
+-- MODI SPEZIELL FÜR TAP BEWEGUNG (TWEEN & TELEPORT)
 -- =========================================================
 
 local modesTitle = Instance.new("TextLabel")
@@ -962,7 +972,8 @@ local infoLabel = Instance.new("TextLabel")
 infoLabel.Size = UDim2.new(1, 0, 1, 0)
 infoLabel.BackgroundTransparency = 1
 infoLabel.Text =
-	"MagnetRed Hub\n\n" ..
+	"Magnet Hub\n\n" ..
+	"• 3 Magneten-Auswahl (Red, Blue, Yellow)\n" ..
 	"• Bewegung & Modi (Tween, Teleport)\n" ..
 	"• Unabhängige Werte für Tween-Speed & Ticks\n" ..
 	"• Orbit mit eigener Geschwindigkeit\n" ..
@@ -1198,4 +1209,4 @@ updateModeUI()
 updateMovementToggle()
 updateStatus()
 
-print("✅ MagnetRed Hub geladen")
+print("✅ Magnet Hub mit Red/Blue/Yellow geladen")
